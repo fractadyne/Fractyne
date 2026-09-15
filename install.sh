@@ -16,7 +16,11 @@ die() { printf 'fractyne installer: %s\n' "$*" >&2; exit 1; }
 # ---- 1. locate (or fetch) the source ---------------------------------
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-if [ -f "$SCRIPT_DIR/src/main.c" ] && [ -f "$SCRIPT_DIR/Makefile" ]; then
+# src/involve.c is Fractyne-specific -- checking only for src/main.c and a
+# Makefile risks a false match against some unrelated C project (e.g. when
+# this script is piped via `sh -c "$(curl ...)"`, $0 is just "sh", so
+# dirname resolves to whatever directory the invoker happened to be in).
+if [ -f "$SCRIPT_DIR/src/main.c" ] && [ -f "$SCRIPT_DIR/src/involve.c" ] && [ -f "$SCRIPT_DIR/Makefile" ]; then
     SRC_DIR="$SCRIPT_DIR"
 elif [ -n "${FRACTYNE_GIT_URL:-}" ]; then
     command -v git >/dev/null 2>&1 || die "git is required to clone \$FRACTYNE_GIT_URL but isn't installed"
