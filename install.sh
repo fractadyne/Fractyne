@@ -63,6 +63,15 @@ if ! command -v gcc >/dev/null 2>&1 && ! command -v cc >/dev/null 2>&1; then
             elif command -v pacman >/dev/null 2>&1; then
                 die "no C compiler found. Install one with:
     sudo pacman -S base-devel"
+            elif command -v zypper >/dev/null 2>&1; then
+                die "no C compiler found. Install one with:
+    sudo zypper install gcc make"
+            elif command -v apk >/dev/null 2>&1; then
+                die "no C compiler found. Install one with:
+    sudo apk add build-base"
+            elif command -v xbps-install >/dev/null 2>&1; then
+                die "no C compiler found. Install one with:
+    sudo xbps-install base-devel"
             else
                 die "no C compiler found. Install gcc and make via your distro's package manager."
             fi ;;
