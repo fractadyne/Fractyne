@@ -247,6 +247,13 @@ Expr *expr_new_ternary(Expr *cond, Expr *then_val, Expr *else_val, int line) {
     return e;
 }
 
+Expr *expr_new_contains(Expr *list, Expr *value, int line) {
+    Expr *e = expr_new(EXPR_CONTAINS, line);
+    e->as.contains.list = list;
+    e->as.contains.value = value;
+    return e;
+}
+
 void expr_free(Expr *e) {
     if (e == NULL) return;
     switch (e->kind) {
@@ -306,6 +313,10 @@ void expr_free(Expr *e) {
             expr_free(e->as.ternary.cond);
             expr_free(e->as.ternary.then_val);
             expr_free(e->as.ternary.else_val);
+            break;
+        case EXPR_CONTAINS:
+            expr_free(e->as.contains.list);
+            expr_free(e->as.contains.value);
             break;
     }
     free(e);
@@ -410,6 +421,28 @@ Stmt *stmt_new_field_assign(const char *name, const char *field, Expr *value, in
     return s;
 }
 
+Stmt *stmt_new_sort(const char *name, int line) {
+    Stmt *s = stmt_new(STMT_SORT, line);
+    s->as.sort_stmt.name = dup_str(name);
+    s->as.sort_stmt.resolved_type = TYPE_UNKNOWN;
+    return s;
+}
+
+Stmt *stmt_new_reverse(const char *name, int line) {
+    Stmt *s = stmt_new(STMT_REVERSE, line);
+    s->as.reverse_stmt.name = dup_str(name);
+    s->as.reverse_stmt.resolved_type = TYPE_UNKNOWN;
+    return s;
+}
+
+Stmt *stmt_new_remove(const char *name, Expr *index, int line) {
+    Stmt *s = stmt_new(STMT_REMOVE, line);
+    s->as.remove_stmt.name = dup_str(name);
+    s->as.remove_stmt.index = index;
+    s->as.remove_stmt.resolved_type = TYPE_UNKNOWN;
+    return s;
+}
+
 void stmt_free(Stmt *s) {
     if (s == NULL) return;
     switch (s->kind) {
@@ -465,6 +498,16 @@ void stmt_free(Stmt *s) {
             free(s->as.field_assign_stmt.name);
             free(s->as.field_assign_stmt.field);
             expr_free(s->as.field_assign_stmt.value);
+            break;
+        case STMT_SORT:
+            free(s->as.sort_stmt.name);
+            break;
+        case STMT_REVERSE:
+            free(s->as.reverse_stmt.name);
+            break;
+        case STMT_REMOVE:
+            free(s->as.remove_stmt.name);
+            expr_free(s->as.remove_stmt.index);
             break;
     }
     free(s);

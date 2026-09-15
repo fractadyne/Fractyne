@@ -21,4 +21,18 @@ fn main() {
     let names = ["ana", "bogdan", "carmen"];
     output(names[1]);
     output(len(names));
+
+    let unsorted = [5, 3, 1, 4, 2];
+    sort(unsorted);
+    output(unsorted[0]);
+    output(unsorted[4]);
+    output(contains(unsorted, 3));
+    output(contains(unsorted, 99));
+
+    reverse(unsorted);
+    output(unsorted[0]);
+
+    remove(unsorted, 0);
+    output(len(unsorted));
+    output(unsorted[0]);
 }

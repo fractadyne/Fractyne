@@ -121,8 +121,13 @@ Lists:
   than reading or corrupting memory silently
 - `len(xs)` — element count; also works on `string` (byte length)
 - `push(xs, v);` — appends `v` (must match the list's element type) to variable `xs`
-- Lists are passed by value like everything else: `push`/`xs[i] = v` inside a function only
-  mutate that function's own copy, not the caller's list
+- `reverse(xs);`, `remove(xs, i);` (bounds-checked, shifts later elements down) — work on any
+  list, including `list<SomeStruct>`
+- `sort(xs);`, `contains(xs, v) -> bool` — only for `int`/`float`/`bool`/`string` element
+  lists; rejected at compile time for a list of structs, since structs have no defined
+  ordering or equality (same reasoning as `==` below)
+- Lists are passed by value like everything else: `push`/`sort`/`reverse`/`remove`/
+  `xs[i] = v` inside a function only mutate that function's own copy, not the caller's list
 - `list<T>` allows a struct as `T` too (`list<Point>`), including a struct field whose type
   is a list of another struct — declaration order between the two doesn't matter. A list can't
   hold another list or a map, though (no `list<list<int>>`)
@@ -169,6 +174,15 @@ immutable — `s[i] = ...` is rejected at compile time. Also `substring(s, start
 I/O: `input()` reads one line from stdin (no trailing newline) and returns it as a
 `string`; at EOF it returns `""`. Not covered by `make test`, since the harness doesn't
 feed stdin to each example — try it directly, e.g. `echo Ada | ./examples/some_program`.
+
+Random numbers: `random() -> float` (`0.0` up to but not including `1.0`), `random_int(lo,
+hi) -> int` (inclusive both ends), `random_seed(seed);` for reproducible output — the RNG
+auto-seeds from the current time on first use if you never call this. See `examples/random.fy`.
+
+File I/O: `read_file(path) -> string` (returns `""` if the file doesn't exist or can't be
+read — no exceptions in Fractyne, so this mirrors `input()`'s EOF behavior rather than
+crashing), `write_file(path, content) -> bool` (overwrites; `bool` reports success),
+`append_file(path, content) -> bool`, `file_exists(path) -> bool`. See `examples/files.fy`.
 
 ## Windows and graphics
 

@@ -138,6 +138,74 @@ static void emit_list_runtime(FILE *out) {
             "}\n\n",
             k->tag, k->struct_name, k->elem_ctype,
             k->tag, k->struct_name, k->elem_ctype);
+
+        fprintf(out,
+            "static void fy_list_%s_reverse(%s *l) __attribute__((unused));\n"
+            "static void fy_list_%s_reverse(%s *l) {\n"
+            "    for (long i = 0, j = l->len - 1; i < j; i++, j--) {\n"
+            "        %s tmp = l->data[i]; l->data[i] = l->data[j]; l->data[j] = tmp;\n"
+            "    }\n"
+            "}\n\n",
+            k->tag, k->struct_name,
+            k->tag, k->struct_name,
+            k->elem_ctype);
+
+        fprintf(out,
+            "static void fy_list_%s_remove(%s *l, long i) __attribute__((unused));\n"
+            "static void fy_list_%s_remove(%s *l, long i) {\n"
+            "    if (i < 0 || i >= l->len) {\n"
+            "        fprintf(stderr, \"fractyne: runtime error: list index %%ld out of bounds (len %%ld)\\n\", i, l->len);\n"
+            "        exit(1);\n"
+            "    }\n"
+            "    for (long j = i; j < l->len - 1; j++) l->data[j] = l->data[j + 1];\n"
+            "    l->len--;\n"
+            "}\n\n",
+            k->tag, k->struct_name,
+            k->tag, k->struct_name);
+
+        if (k->type == TYPE_LIST_STRING) {
+            fprintf(out,
+                "static int fy_list_%s_cmp(const void *a, const void *b) __attribute__((unused));\n"
+                "static int fy_list_%s_cmp(const void *a, const void *b) {\n"
+                "    return strcmp(*(const char *const *)a, *(const char *const *)b);\n"
+                "}\n\n",
+                k->tag, k->tag);
+        } else {
+            fprintf(out,
+                "static int fy_list_%s_cmp(const void *a, const void *b) __attribute__((unused));\n"
+                "static int fy_list_%s_cmp(const void *a, const void *b) {\n"
+                "    %s x = *(const %s *)a, y = *(const %s *)b;\n"
+                "    return (x > y) - (x < y);\n"
+                "}\n\n",
+                k->tag, k->tag, k->elem_ctype, k->elem_ctype, k->elem_ctype);
+        }
+
+        fprintf(out,
+            "static void fy_list_%s_sort(%s *l) __attribute__((unused));\n"
+            "static void fy_list_%s_sort(%s *l) {\n"
+            "    qsort(l->data, (size_t)l->len, sizeof(%s), fy_list_%s_cmp);\n"
+            "}\n\n",
+            k->tag, k->struct_name,
+            k->tag, k->struct_name,
+            k->elem_ctype, k->tag);
+
+        if (k->type == TYPE_LIST_STRING) {
+            fprintf(out,
+                "static int fy_list_%s_contains(%s l, const char *v) __attribute__((unused));\n"
+                "static int fy_list_%s_contains(%s l, const char *v) {\n"
+                "    for (long i = 0; i < l.len; i++) if (strcmp(l.data[i], v) == 0) return 1;\n"
+                "    return 0;\n"
+                "}\n\n",
+                k->tag, k->struct_name, k->tag, k->struct_name);
+        } else {
+            fprintf(out,
+                "static int fy_list_%s_contains(%s l, %s v) __attribute__((unused));\n"
+                "static int fy_list_%s_contains(%s l, %s v) {\n"
+                "    for (long i = 0; i < l.len; i++) if (l.data[i] == v) return 1;\n"
+                "    return 0;\n"
+                "}\n\n",
+                k->tag, k->struct_name, k->elem_ctype, k->tag, k->struct_name, k->elem_ctype);
+        }
     }
 }
 
@@ -262,6 +330,27 @@ static void emit_struct_list_wrapper(FILE *out, const StructDecl *sd) {
         "}\n\n",
         sd->name, sd->name, struct_ctype,
         sd->name, sd->name, struct_ctype);
+
+    fprintf(out,
+        "static void fy_list_struct_%s_reverse(FyListStruct_%s *l) __attribute__((unused));\n"
+        "static void fy_list_struct_%s_reverse(FyListStruct_%s *l) {\n"
+        "    for (long i = 0, j = l->len - 1; i < j; i++, j--) {\n"
+        "        %s tmp = l->data[i]; l->data[i] = l->data[j]; l->data[j] = tmp;\n"
+        "    }\n"
+        "}\n\n",
+        sd->name, sd->name, sd->name, sd->name, struct_ctype);
+
+    fprintf(out,
+        "static void fy_list_struct_%s_remove(FyListStruct_%s *l, long i) __attribute__((unused));\n"
+        "static void fy_list_struct_%s_remove(FyListStruct_%s *l, long i) {\n"
+        "    if (i < 0 || i >= l->len) {\n"
+        "        fprintf(stderr, \"fractyne: runtime error: list index %%ld out of bounds (len %%ld)\\n\", i, l->len);\n"
+        "        exit(1);\n"
+        "    }\n"
+        "    for (long j = i; j < l->len - 1; j++) l->data[j] = l->data[j + 1];\n"
+        "    l->len--;\n"
+        "}\n\n",
+        sd->name, sd->name, sd->name, sd->name);
 }
 
 /* Struct typedefs must appear after any struct-typed (or list-of-that-struct
@@ -471,6 +560,91 @@ static void emit_string_builtins(FILE *out) {
         "static long fy_index_of(const char *s, const char *needle) {\n"
         "    const char *found = strstr(s, needle);\n"
         "    return found ? (long)(found - s) : -1L;\n"
+        "}\n\n");
+}
+
+static void emit_random_builtins(FILE *out) {
+    fprintf(out,
+        "static int fy_rand_seeded __attribute__((unused)) = 0;\n"
+        "static void fy_rand_ensure_seeded(void) __attribute__((unused));\n"
+        "static void fy_rand_ensure_seeded(void) {\n"
+        "    if (!fy_rand_seeded) { srand((unsigned)time(NULL)); fy_rand_seeded = 1; }\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static double fy_random(void) __attribute__((unused));\n"
+        "static double fy_random(void) {\n"
+        "    fy_rand_ensure_seeded();\n"
+        "    return (double)rand() / ((double)RAND_MAX + 1.0);\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static long fy_random_int(long lo, long hi) __attribute__((unused));\n"
+        "static long fy_random_int(long lo, long hi) {\n"
+        "    fy_rand_ensure_seeded();\n"
+        "    if (hi <= lo) return lo;\n"
+        "    return lo + (long)(rand() %% (hi - lo + 1));\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_random_seed(long seed) __attribute__((unused));\n"
+        "static void fy_random_seed(long seed) {\n"
+        "    srand((unsigned)seed);\n"
+        "    fy_rand_seeded = 1;\n"
+        "}\n\n");
+}
+
+/* read_file/file_exists return "read nothing"/"false" rather than an error
+ * on failure -- no exceptions or Option type in Fractyne, so a missing or
+ * unreadable file behaves the same as input() at EOF: a defined, checkable
+ * empty result instead of a crash. write_file/append_file report success
+ * via their bool return instead. */
+static void emit_file_builtins(FILE *out) {
+    fprintf(out,
+        "static const char *fy_read_file(const char *path) __attribute__((unused));\n"
+        "static const char *fy_read_file(const char *path) {\n"
+        "    FILE *f = fopen(path, \"rb\");\n"
+        "    if (f == NULL) { char *r = malloc(1); r[0] = '\\0'; return r; }\n"
+        "    fseek(f, 0, SEEK_END);\n"
+        "    long size = ftell(f);\n"
+        "    if (size < 0) { fclose(f); char *r = malloc(1); r[0] = '\\0'; return r; }\n"
+        "    rewind(f);\n"
+        "    char *buf = malloc((size_t)size + 1);\n"
+        "    size_t n = fread(buf, 1, (size_t)size, f);\n"
+        "    buf[n] = '\\0';\n"
+        "    fclose(f);\n"
+        "    return buf;\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static int fy_write_file(const char *path, const char *content) __attribute__((unused));\n"
+        "static int fy_write_file(const char *path, const char *content) {\n"
+        "    FILE *f = fopen(path, \"wb\");\n"
+        "    if (f == NULL) return 0;\n"
+        "    size_t len = strlen(content);\n"
+        "    size_t written = fwrite(content, 1, len, f);\n"
+        "    fclose(f);\n"
+        "    return written == len;\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static int fy_append_file(const char *path, const char *content) __attribute__((unused));\n"
+        "static int fy_append_file(const char *path, const char *content) {\n"
+        "    FILE *f = fopen(path, \"ab\");\n"
+        "    if (f == NULL) return 0;\n"
+        "    size_t len = strlen(content);\n"
+        "    size_t written = fwrite(content, 1, len, f);\n"
+        "    fclose(f);\n"
+        "    return written == len;\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static int fy_file_exists(const char *path) __attribute__((unused));\n"
+        "static int fy_file_exists(const char *path) {\n"
+        "    FILE *f = fopen(path, \"rb\");\n"
+        "    if (f == NULL) return 0;\n"
+        "    fclose(f);\n"
+        "    return 1;\n"
         "}\n\n");
 }
 
@@ -791,6 +965,15 @@ static void emit_expr(FILE *out, Expr *e) {
             emit_expr(out, e->as.ternary.else_val);
             fprintf(out, ")");
             return;
+        case EXPR_CONTAINS: {
+            const ListKind *k = list_kind_for(e->as.contains.list->type);
+            fprintf(out, "fy_list_%s_contains(", k->tag);
+            emit_expr(out, e->as.contains.list);
+            fprintf(out, ", ");
+            emit_expr(out, e->as.contains.value);
+            fprintf(out, ")");
+            return;
+        }
     }
 }
 
@@ -973,6 +1156,38 @@ static void emit_stmt(FILE *out, int level, Stmt *s, int in_main) {
             emit_expr(out, s->as.field_assign_stmt.value);
             fprintf(out, ";\n");
             return;
+        case STMT_SORT: {
+            const ListKind *k = list_kind_for(s->as.sort_stmt.resolved_type);
+            indent(out, level);
+            fprintf(out, "fy_list_%s_sort(&%s);\n", k->tag, s->as.sort_stmt.name);
+            return;
+        }
+        case STMT_REVERSE: {
+            Type t = s->as.reverse_stmt.resolved_type;
+            indent(out, level);
+            if (type_is_list_of_struct(t)) {
+                const StructDecl *sd = struct_decl_for(list_elem(t));
+                fprintf(out, "fy_list_struct_%s_reverse(&%s);\n", sd->name, s->as.reverse_stmt.name);
+            } else {
+                const ListKind *k = list_kind_for(t);
+                fprintf(out, "fy_list_%s_reverse(&%s);\n", k->tag, s->as.reverse_stmt.name);
+            }
+            return;
+        }
+        case STMT_REMOVE: {
+            Type t = s->as.remove_stmt.resolved_type;
+            indent(out, level);
+            if (type_is_list_of_struct(t)) {
+                const StructDecl *sd = struct_decl_for(list_elem(t));
+                fprintf(out, "fy_list_struct_%s_remove(&%s, ", sd->name, s->as.remove_stmt.name);
+            } else {
+                const ListKind *k = list_kind_for(t);
+                fprintf(out, "fy_list_%s_remove(&%s, ", k->tag, s->as.remove_stmt.name);
+            }
+            emit_expr(out, s->as.remove_stmt.index);
+            fprintf(out, ");\n");
+            return;
+        }
     }
 }
 
@@ -1015,7 +1230,7 @@ int codegen_emit(Program *prog, const char *out_path, Diag *diag) {
     }
 
     fprintf(out, "/* Generated by the Fractyne compiler. Do not edit by hand. */\n");
-    fprintf(out, "#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n#include <math.h>\n#include <ctype.h>\n");
+    fprintf(out, "#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n#include <math.h>\n#include <ctype.h>\n#include <time.h>\n");
     if (prog->uses_sdl) fprintf(out, "#include <SDL2/SDL.h>\n");
     fprintf(out, "\n");
     fprintf(out, "static const char *fy_concat(const char *a, const char *b) __attribute__((unused));\n");
@@ -1048,6 +1263,8 @@ int codegen_emit(Program *prog, const char *out_path, Diag *diag) {
     emit_shape_builtins(out);
     emit_math_builtins(out);
     emit_string_builtins(out);
+    emit_random_builtins(out);
+    emit_file_builtins(out);
     if (prog->uses_sdl) emit_sdl_builtins(out);
 
     for (int i = 0; i < prog->global_count; i++) {

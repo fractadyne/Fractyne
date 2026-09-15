@@ -157,6 +157,17 @@ static Expr *parse_primary(Parser *p) {
             if (expect(p, TOK_RPAREN, "')' after len argument") == NULL) return NULL;
             return expr_new_len(target, t->line);
         }
+        case TOK_CONTAINS: {
+            advance_tok(p);
+            if (expect(p, TOK_LPAREN, "'(' after contains") == NULL) return NULL;
+            Expr *list = parse_expr(p);
+            if (list == NULL || p->diag->has_error) return NULL;
+            if (expect(p, TOK_COMMA, "',' after contains list argument") == NULL) return NULL;
+            Expr *value = parse_expr(p);
+            if (value == NULL || p->diag->has_error) return NULL;
+            if (expect(p, TOK_RPAREN, "')' after contains argument") == NULL) return NULL;
+            return expr_new_contains(list, value, t->line);
+        }
         case TOK_LBRACE: {
             advance_tok(p);
             PtrList keys, values;
@@ -345,6 +356,42 @@ static Stmt *parse_push(Parser *p) {
     return stmt_new_push(name->text, value, line);
 }
 
+static Stmt *parse_sort(Parser *p) {
+    int line = cur(p)->line;
+    advance_tok(p); /* 'sort' */
+    if (expect(p, TOK_LPAREN, "'(' after sort") == NULL) return NULL;
+    Token *name = expect(p, TOK_IDENT, "a list variable name");
+    if (name == NULL) return NULL;
+    if (expect(p, TOK_RPAREN, "')' after sort argument") == NULL) return NULL;
+    if (expect(p, TOK_SEMI, "';' after sort statement") == NULL) return NULL;
+    return stmt_new_sort(name->text, line);
+}
+
+static Stmt *parse_reverse(Parser *p) {
+    int line = cur(p)->line;
+    advance_tok(p); /* 'reverse' */
+    if (expect(p, TOK_LPAREN, "'(' after reverse") == NULL) return NULL;
+    Token *name = expect(p, TOK_IDENT, "a list variable name");
+    if (name == NULL) return NULL;
+    if (expect(p, TOK_RPAREN, "')' after reverse argument") == NULL) return NULL;
+    if (expect(p, TOK_SEMI, "';' after reverse statement") == NULL) return NULL;
+    return stmt_new_reverse(name->text, line);
+}
+
+static Stmt *parse_remove(Parser *p) {
+    int line = cur(p)->line;
+    advance_tok(p); /* 'remove' */
+    if (expect(p, TOK_LPAREN, "'(' after remove") == NULL) return NULL;
+    Token *name = expect(p, TOK_IDENT, "a list variable name");
+    if (name == NULL) return NULL;
+    if (expect(p, TOK_COMMA, "',' after list name") == NULL) return NULL;
+    Expr *index = parse_expr(p);
+    if (index == NULL || p->diag->has_error) return NULL;
+    if (expect(p, TOK_RPAREN, "')' after remove argument") == NULL) return NULL;
+    if (expect(p, TOK_SEMI, "';' after remove statement") == NULL) return NULL;
+    return stmt_new_remove(name->text, index, line);
+}
+
 static Stmt *parse_if(Parser *p) {
     int line = cur(p)->line;
     advance_tok(p); /* 'if' */
@@ -451,6 +498,9 @@ static Stmt *parse_statement(Parser *p) {
         case TOK_LET: return parse_let(p);
         case TOK_OUTPUT: return parse_output(p);
         case TOK_PUSH: return parse_push(p);
+        case TOK_SORT: return parse_sort(p);
+        case TOK_REVERSE: return parse_reverse(p);
+        case TOK_REMOVE: return parse_remove(p);
         case TOK_IF: return parse_if(p);
         case TOK_WHILE: return parse_while(p);
         case TOK_FOR: return parse_for(p);

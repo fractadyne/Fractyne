@@ -436,6 +436,30 @@ static Type check_expr(Sema *sm, Scope *sc, Expr *e) {
             e->type = then_type;
             return e->type;
         }
+        case EXPR_CONTAINS: {
+            Type list_type = check_expr(sm, sc, e->as.contains.list);
+            if (sm->diag->has_error) return TYPE_UNKNOWN;
+            if (!type_is_list(list_type)) {
+                diag_set(sm->diag, e->line, "contains() requires a list, got %s", type_name(list_type));
+                return TYPE_UNKNOWN;
+            }
+            if (type_is_list_of_struct(list_type)) {
+                diag_set(sm->diag, e->line,
+                         "cannot check containment in a list of structs; structs have no "
+                         "equality -- compare fields individually");
+                return TYPE_UNKNOWN;
+            }
+            Type value_type = check_expr(sm, sc, e->as.contains.value);
+            if (sm->diag->has_error) return TYPE_UNKNOWN;
+            Type elem = list_elem(list_type);
+            if (value_type != elem) {
+                diag_set(sm->diag, e->line, "contains() value has type %s, expected %s",
+                         type_name(value_type), type_name(elem));
+                return TYPE_UNKNOWN;
+            }
+            e->type = TYPE_BOOL;
+            return TYPE_BOOL;
+        }
     }
     return TYPE_UNKNOWN;
 }
@@ -682,6 +706,62 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                 diag_set(sm->diag, s->line, "cannot assign %s to field '%s' of type %s",
                          type_name(value_type), field->name, type_name(field->type));
             }
+            return;
+        }
+        case STMT_SORT: {
+            int found;
+            Type declared = scope_lookup(sc, s->as.sort_stmt.name, &found);
+            if (!found) {
+                diag_set(sm->diag, s->line, "sort() on undeclared variable '%s'", s->as.sort_stmt.name);
+                return;
+            }
+            if (!type_is_list(declared)) {
+                diag_set(sm->diag, s->line, "sort() requires a list, got %s", type_name(declared));
+                return;
+            }
+            if (type_is_list_of_struct(declared)) {
+                diag_set(sm->diag, s->line,
+                         "cannot sort a list of structs; structs have no ordering -- "
+                         "sort by a field manually");
+                return;
+            }
+            s->as.sort_stmt.resolved_type = declared;
+            return;
+        }
+        case STMT_REVERSE: {
+            int found;
+            Type declared = scope_lookup(sc, s->as.reverse_stmt.name, &found);
+            if (!found) {
+                diag_set(sm->diag, s->line, "reverse() on undeclared variable '%s'",
+                         s->as.reverse_stmt.name);
+                return;
+            }
+            if (!type_is_list(declared)) {
+                diag_set(sm->diag, s->line, "reverse() requires a list, got %s", type_name(declared));
+                return;
+            }
+            s->as.reverse_stmt.resolved_type = declared;
+            return;
+        }
+        case STMT_REMOVE: {
+            int found;
+            Type declared = scope_lookup(sc, s->as.remove_stmt.name, &found);
+            if (!found) {
+                diag_set(sm->diag, s->line, "remove() on undeclared variable '%s'",
+                         s->as.remove_stmt.name);
+                return;
+            }
+            if (!type_is_list(declared)) {
+                diag_set(sm->diag, s->line, "remove() requires a list, got %s", type_name(declared));
+                return;
+            }
+            Type idx = check_expr(sm, sc, s->as.remove_stmt.index);
+            if (sm->diag->has_error) return;
+            if (idx != TYPE_INT) {
+                diag_set(sm->diag, s->line, "remove() index must be int, got %s", type_name(idx));
+                return;
+            }
+            s->as.remove_stmt.resolved_type = declared;
             return;
         }
     }

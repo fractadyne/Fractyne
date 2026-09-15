@@ -46,7 +46,7 @@ typedef struct {
 typedef enum {
     EXPR_INT, EXPR_FLOAT, EXPR_BOOL, EXPR_STRING, EXPR_VAR,
     EXPR_UNARY, EXPR_BINARY, EXPR_CALL, EXPR_LIST, EXPR_INDEX, EXPR_LEN, EXPR_MAP,
-    EXPR_STRUCT_LIT, EXPR_FIELD, EXPR_TERNARY
+    EXPR_STRUCT_LIT, EXPR_FIELD, EXPR_TERNARY, EXPR_CONTAINS
 } ExprKind;
 
 typedef struct Expr {
@@ -68,13 +68,15 @@ typedef struct Expr {
         struct { char *struct_name; char **field_names; struct Expr **field_values; int count; } struct_lit;
         struct { struct Expr *base; char *field; } field;
         struct { struct Expr *cond; struct Expr *then_val; struct Expr *else_val; } ternary;
+        struct { struct Expr *list; struct Expr *value; } contains;
     } as;
 } Expr;
 
 typedef enum {
     STMT_LET, STMT_ASSIGN, STMT_OUTPUT, STMT_IF, STMT_WHILE, STMT_FOR,
     STMT_RETURN, STMT_BLOCK, STMT_EXPR, STMT_PUSH, STMT_INDEX_ASSIGN,
-    STMT_BREAK, STMT_CONTINUE, STMT_FIELD_ASSIGN
+    STMT_BREAK, STMT_CONTINUE, STMT_FIELD_ASSIGN,
+    STMT_SORT, STMT_REVERSE, STMT_REMOVE
 } StmtKind;
 
 typedef struct Stmt {
@@ -93,6 +95,9 @@ typedef struct Stmt {
         struct { char *name; Expr *value; } push_stmt;
         struct { char *name; Expr *index; Expr *value; } index_assign_stmt;
         struct { char *name; char *field; Expr *value; } field_assign_stmt;
+        struct { char *name; Type resolved_type; } sort_stmt;
+        struct { char *name; Type resolved_type; } reverse_stmt;
+        struct { char *name; Expr *index; Type resolved_type; } remove_stmt;
     } as;
 } Stmt;
 
@@ -139,6 +144,7 @@ Expr *expr_new_struct_lit(const char *struct_name, char **field_names, Expr **fi
                            int count, int line);
 Expr *expr_new_field(Expr *base, const char *field, int line);
 Expr *expr_new_ternary(Expr *cond, Expr *then_val, Expr *else_val, int line);
+Expr *expr_new_contains(Expr *list, Expr *value, int line);
 void expr_free(Expr *e);
 
 /* Stmt constructors */
@@ -156,6 +162,9 @@ Stmt *stmt_new_expr(Expr *expr, int line);
 Stmt *stmt_new_push(const char *name, Expr *value, int line);
 Stmt *stmt_new_index_assign(const char *name, Expr *index, Expr *value, int line);
 Stmt *stmt_new_field_assign(const char *name, const char *field, Expr *value, int line);
+Stmt *stmt_new_sort(const char *name, int line);
+Stmt *stmt_new_reverse(const char *name, int line);
+Stmt *stmt_new_remove(const char *name, Expr *index, int line);
 void stmt_free(Stmt *s);
 
 FunctionDecl *function_decl_new(const char *name, Param *params, int param_count,

@@ -52,6 +52,15 @@ static const Builtin BUILTINS[] = {
 
     {"delay_ms", 1, {TYPE_INT}, TYPE_VOID, 1},
     {"ticks_ms", 0, {0}, TYPE_INT, 1},
+
+    {"random", 0, {0}, TYPE_FLOAT, 0},
+    {"random_int", 2, {TYPE_INT, TYPE_INT}, TYPE_INT, 0},
+    {"random_seed", 1, {TYPE_INT}, TYPE_VOID, 0},
+
+    {"read_file", 1, {TYPE_STRING}, TYPE_STRING, 0},
+    {"write_file", 2, {TYPE_STRING, TYPE_STRING}, TYPE_BOOL, 0},
+    {"append_file", 2, {TYPE_STRING, TYPE_STRING}, TYPE_BOOL, 0},
+    {"file_exists", 1, {TYPE_STRING}, TYPE_BOOL, 0},
 };
 #define BUILTIN_COUNT (sizeof(BUILTINS) / sizeof(BUILTINS[0]))
 
