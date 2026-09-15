@@ -38,14 +38,20 @@ static void derive_output_paths(const char *src_path, const char *out_dir,
     }
 }
 
-static int run_gcc(const char *c_path, const char *bin_path) {
+static int run_gcc(const char *c_path, const char *bin_path, int needs_sdl) {
     pid_t pid = fork();
     if (pid < 0) {
         perror("fractyne: fork");
         return 0;
     }
     if (pid == 0) {
-        execlp("gcc", "gcc", "-std=c11", "-Wall", "-Wextra", "-o", bin_path, c_path, "-lm", (char *)NULL);
+        if (needs_sdl) {
+            execlp("gcc", "gcc", "-std=c11", "-Wall", "-Wextra", "-o", bin_path, c_path,
+                   "-lm", "-lSDL2", (char *)NULL);
+        } else {
+            execlp("gcc", "gcc", "-std=c11", "-Wall", "-Wextra", "-o", bin_path, c_path,
+                   "-lm", (char *)NULL);
+        }
         perror("fractyne: exec gcc");
         _exit(127);
     }
@@ -92,10 +98,16 @@ static int compile_program(const char *src_path, const char *c_path, const char 
         return 0;
     }
 
+    int needs_sdl = prog->uses_sdl;
     program_free(prog);
 
-    if (!run_gcc(c_path, bin_path)) {
+    if (!run_gcc(c_path, bin_path, needs_sdl)) {
         fprintf(stderr, "fractyne: gcc failed to compile the generated C for '%s'\n", src_path);
+        if (needs_sdl) {
+            fprintf(stderr, "fractyne: this program uses window/graphics builtins -- if gcc "
+                            "couldn't find SDL2, install its development package (e.g. "
+                            "libsdl2-dev on Debian/Ubuntu, sdl2 on Arch, SDL2-devel on Fedora)\n");
+        }
         return 0;
     }
 

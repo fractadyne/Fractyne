@@ -474,6 +474,147 @@ static void emit_string_builtins(FILE *out) {
         "}\n\n");
 }
 
+/* Only emitted for programs that actually call a window/gfx/input/timing
+ * builtin (see Program.uses_sdl) -- everything here is a thin, direct
+ * wrapper around one SDL2 call, backed by a handful of file-scope globals
+ * standing in for "the" window, since Fractyne has no handle/pointer type
+ * to thread a real window object through user code. Only one window at a
+ * time; that's the deliberate v1 scope. */
+static void emit_sdl_builtins(FILE *out) {
+    fprintf(out,
+        "static SDL_Window *fy_sdl_window = NULL;\n"
+        "static SDL_Renderer *fy_sdl_renderer = NULL;\n"
+        "static int fy_sdl_should_close = 0;\n"
+        "static Uint8 fy_sdl_color_r = 255, fy_sdl_color_g = 255, fy_sdl_color_b = 255;\n"
+        "static int fy_sdl_mouse_x = 0, fy_sdl_mouse_y = 0;\n"
+        "static Uint32 fy_sdl_mouse_buttons = 0;\n"
+        "static const Uint8 *fy_sdl_keys = NULL;\n\n");
+
+    fprintf(out,
+        "static int fy_window_open(long width, long height, const char *title) __attribute__((unused));\n"
+        "static int fy_window_open(long width, long height, const char *title) {\n"
+        "    if (SDL_Init(SDL_INIT_VIDEO) != 0) {\n"
+        "        fprintf(stderr, \"fractyne: SDL_Init failed: %%s\\n\", SDL_GetError());\n"
+        "        return 0;\n"
+        "    }\n"
+        "    fy_sdl_window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,\n"
+        "        (int)width, (int)height, SDL_WINDOW_SHOWN);\n"
+        "    if (fy_sdl_window == NULL) {\n"
+        "        fprintf(stderr, \"fractyne: SDL_CreateWindow failed: %%s\\n\", SDL_GetError());\n"
+        "        return 0;\n"
+        "    }\n"
+        "    fy_sdl_renderer = SDL_CreateRenderer(fy_sdl_window, -1, SDL_RENDERER_ACCELERATED);\n"
+        "    if (fy_sdl_renderer == NULL) {\n"
+        "        fprintf(stderr, \"fractyne: SDL_CreateRenderer failed: %%s\\n\", SDL_GetError());\n"
+        "        return 0;\n"
+        "    }\n"
+        "    fy_sdl_keys = SDL_GetKeyboardState(NULL);\n"
+        "    return 1;\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_window_close(void) __attribute__((unused));\n"
+        "static void fy_window_close(void) {\n"
+        "    if (fy_sdl_renderer != NULL) { SDL_DestroyRenderer(fy_sdl_renderer); fy_sdl_renderer = NULL; }\n"
+        "    if (fy_sdl_window != NULL) { SDL_DestroyWindow(fy_sdl_window); fy_sdl_window = NULL; }\n"
+        "    SDL_Quit();\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static int fy_window_should_close(void) __attribute__((unused));\n"
+        "static int fy_window_should_close(void) { return fy_sdl_should_close; }\n\n");
+
+    fprintf(out,
+        "static void fy_window_poll_events(void) __attribute__((unused));\n"
+        "static void fy_window_poll_events(void) {\n"
+        "    SDL_Event ev;\n"
+        "    while (SDL_PollEvent(&ev)) {\n"
+        "        if (ev.type == SDL_QUIT) fy_sdl_should_close = 1;\n"
+        "    }\n"
+        "    fy_sdl_mouse_buttons = SDL_GetMouseState(&fy_sdl_mouse_x, &fy_sdl_mouse_y);\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_window_clear(long r, long g, long b) __attribute__((unused));\n"
+        "static void fy_window_clear(long r, long g, long b) {\n"
+        "    SDL_SetRenderDrawColor(fy_sdl_renderer, (Uint8)r, (Uint8)g, (Uint8)b, 255);\n"
+        "    SDL_RenderClear(fy_sdl_renderer);\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_window_present(void) __attribute__((unused));\n"
+        "static void fy_window_present(void) { SDL_RenderPresent(fy_sdl_renderer); }\n\n");
+
+    fprintf(out,
+        "static void fy_gfx_set_color(long r, long g, long b) __attribute__((unused));\n"
+        "static void fy_gfx_set_color(long r, long g, long b) {\n"
+        "    fy_sdl_color_r = (Uint8)r; fy_sdl_color_g = (Uint8)g; fy_sdl_color_b = (Uint8)b;\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_gfx_pixel(long x, long y) __attribute__((unused));\n"
+        "static void fy_gfx_pixel(long x, long y) {\n"
+        "    SDL_SetRenderDrawColor(fy_sdl_renderer, fy_sdl_color_r, fy_sdl_color_g, fy_sdl_color_b, 255);\n"
+        "    SDL_RenderDrawPoint(fy_sdl_renderer, (int)x, (int)y);\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_gfx_line(long x1, long y1, long x2, long y2) __attribute__((unused));\n"
+        "static void fy_gfx_line(long x1, long y1, long x2, long y2) {\n"
+        "    SDL_SetRenderDrawColor(fy_sdl_renderer, fy_sdl_color_r, fy_sdl_color_g, fy_sdl_color_b, 255);\n"
+        "    SDL_RenderDrawLine(fy_sdl_renderer, (int)x1, (int)y1, (int)x2, (int)y2);\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_gfx_rect(long x, long y, long w, long h) __attribute__((unused));\n"
+        "static void fy_gfx_rect(long x, long y, long w, long h) {\n"
+        "    SDL_Rect rect; rect.x = (int)x; rect.y = (int)y; rect.w = (int)w; rect.h = (int)h;\n"
+        "    SDL_SetRenderDrawColor(fy_sdl_renderer, fy_sdl_color_r, fy_sdl_color_g, fy_sdl_color_b, 255);\n"
+        "    SDL_RenderFillRect(fy_sdl_renderer, &rect);\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_gfx_circle(long cx, long cy, long radius) __attribute__((unused));\n"
+        "static void fy_gfx_circle(long cx, long cy, long radius) {\n"
+        "    SDL_SetRenderDrawColor(fy_sdl_renderer, fy_sdl_color_r, fy_sdl_color_g, fy_sdl_color_b, 255);\n"
+        "    for (long dy = -radius; dy <= radius; dy++) {\n"
+        "        long dx = (long)(sqrt((double)(radius * radius - dy * dy)) + 0.5);\n"
+        "        SDL_RenderDrawLine(fy_sdl_renderer, (int)(cx - dx), (int)(cy + dy), (int)(cx + dx), (int)(cy + dy));\n"
+        "    }\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static int fy_key_down(const char *name) __attribute__((unused));\n"
+        "static int fy_key_down(const char *name) {\n"
+        "    SDL_Scancode sc = SDL_GetScancodeFromName(name);\n"
+        "    if (sc == SDL_SCANCODE_UNKNOWN || fy_sdl_keys == NULL) return 0;\n"
+        "    return fy_sdl_keys[sc] ? 1 : 0;\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static long fy_mouse_x(void) __attribute__((unused));\n"
+        "static long fy_mouse_x(void) { return (long)fy_sdl_mouse_x; }\n\n"
+        "static long fy_mouse_y(void) __attribute__((unused));\n"
+        "static long fy_mouse_y(void) { return (long)fy_sdl_mouse_y; }\n\n");
+
+    fprintf(out,
+        "static int fy_mouse_down(const char *button) __attribute__((unused));\n"
+        "static int fy_mouse_down(const char *button) {\n"
+        "    Uint32 mask;\n"
+        "    if (strcmp(button, \"left\") == 0) mask = SDL_BUTTON(SDL_BUTTON_LEFT);\n"
+        "    else if (strcmp(button, \"right\") == 0) mask = SDL_BUTTON(SDL_BUTTON_RIGHT);\n"
+        "    else if (strcmp(button, \"middle\") == 0) mask = SDL_BUTTON(SDL_BUTTON_MIDDLE);\n"
+        "    else return 0;\n"
+        "    return (fy_sdl_mouse_buttons & mask) ? 1 : 0;\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static void fy_delay_ms(long ms) __attribute__((unused));\n"
+        "static void fy_delay_ms(long ms) { SDL_Delay((Uint32)ms); }\n\n"
+        "static long fy_ticks_ms(void) __attribute__((unused));\n"
+        "static long fy_ticks_ms(void) { return (long)SDL_GetTicks(); }\n\n");
+}
+
 static const char *c_func_name(const char *fractyne_name, char *buf, size_t buf_size) {
     if (strcmp(fractyne_name, "main") == 0) return "main";
     snprintf(buf, buf_size, "fy_%s", fractyne_name);
@@ -686,19 +827,23 @@ static void emit_output(FILE *out, int level, Expr *value) {
     }
 }
 
-static void emit_stmt(FILE *out, int level, Stmt *s);
+static void emit_stmt(FILE *out, int level, Stmt *s, int in_main);
 
-static void emit_block(FILE *out, int level, Stmt *block) {
+static void emit_block(FILE *out, int level, Stmt *block, int in_main) {
     indent(out, level);
     fprintf(out, "{\n");
     for (int i = 0; i < block->as.block.count; i++) {
-        emit_stmt(out, level + 1, block->as.block.stmts[i]);
+        emit_stmt(out, level + 1, block->as.block.stmts[i], in_main);
     }
     indent(out, level);
     fprintf(out, "}\n");
 }
 
-static void emit_stmt(FILE *out, int level, Stmt *s) {
+/* in_main: Fractyne's main() is conceptually void (see sema_check), but C
+ * requires `int main(void)`, so a bare `return;` written inside it has to
+ * become `return 0;` here -- everywhere else a bare return is emitted as-is
+ * since every other Fractyne void function is genuinely declared void in C. */
+static void emit_stmt(FILE *out, int level, Stmt *s, int in_main) {
     switch (s->kind) {
         case STMT_LET:
             indent(out, level);
@@ -720,14 +865,14 @@ static void emit_stmt(FILE *out, int level, Stmt *s) {
             fprintf(out, "if (");
             emit_expr(out, s->as.if_stmt.cond);
             fprintf(out, ")\n");
-            emit_block(out, level, s->as.if_stmt.then_branch);
+            emit_block(out, level, s->as.if_stmt.then_branch, in_main);
             if (s->as.if_stmt.else_branch != NULL) {
                 indent(out, level);
                 fprintf(out, "else\n");
                 if (s->as.if_stmt.else_branch->kind == STMT_IF) {
-                    emit_stmt(out, level, s->as.if_stmt.else_branch);
+                    emit_stmt(out, level, s->as.if_stmt.else_branch, in_main);
                 } else {
-                    emit_block(out, level, s->as.if_stmt.else_branch);
+                    emit_block(out, level, s->as.if_stmt.else_branch, in_main);
                 }
             }
             return;
@@ -736,7 +881,7 @@ static void emit_stmt(FILE *out, int level, Stmt *s) {
             fprintf(out, "while (");
             emit_expr(out, s->as.while_stmt.cond);
             fprintf(out, ")\n");
-            emit_block(out, level, s->as.while_stmt.body);
+            emit_block(out, level, s->as.while_stmt.body, in_main);
             return;
         case STMT_FOR: {
             Stmt *init = s->as.for_stmt.init;
@@ -755,7 +900,7 @@ static void emit_stmt(FILE *out, int level, Stmt *s) {
             fprintf(out, "; %s = ", step->as.assign_stmt.name);
             emit_expr(out, step->as.assign_stmt.value);
             fprintf(out, ")\n");
-            emit_block(out, level, s->as.for_stmt.body);
+            emit_block(out, level, s->as.for_stmt.body, in_main);
             return;
         }
         case STMT_BREAK:
@@ -769,7 +914,7 @@ static void emit_stmt(FILE *out, int level, Stmt *s) {
         case STMT_RETURN:
             indent(out, level);
             if (s->as.return_stmt.value == NULL) {
-                fprintf(out, "return;\n");
+                fprintf(out, in_main ? "return 0;\n" : "return;\n");
             } else {
                 fprintf(out, "return ");
                 emit_expr(out, s->as.return_stmt.value);
@@ -777,7 +922,7 @@ static void emit_stmt(FILE *out, int level, Stmt *s) {
             }
             return;
         case STMT_BLOCK:
-            emit_block(out, level, s);
+            emit_block(out, level, s, in_main);
             return;
         case STMT_EXPR:
             indent(out, level);
@@ -850,12 +995,13 @@ static void emit_signature(FILE *out, FunctionDecl *f) {
 }
 
 static void emit_function(FILE *out, FunctionDecl *f) {
+    int in_main = strcmp(f->name, "main") == 0;
     emit_signature(out, f);
     fprintf(out, "\n{\n");
     for (int i = 0; i < f->body->as.block.count; i++) {
-        emit_stmt(out, 1, f->body->as.block.stmts[i]);
+        emit_stmt(out, 1, f->body->as.block.stmts[i], in_main);
     }
-    if (strcmp(f->name, "main") == 0) {
+    if (in_main) {
         fprintf(out, "    return 0;\n");
     }
     fprintf(out, "}\n\n");
@@ -869,7 +1015,9 @@ int codegen_emit(Program *prog, const char *out_path, Diag *diag) {
     }
 
     fprintf(out, "/* Generated by the Fractyne compiler. Do not edit by hand. */\n");
-    fprintf(out, "#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n#include <math.h>\n#include <ctype.h>\n\n");
+    fprintf(out, "#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n#include <math.h>\n#include <ctype.h>\n");
+    if (prog->uses_sdl) fprintf(out, "#include <SDL2/SDL.h>\n");
+    fprintf(out, "\n");
     fprintf(out, "static const char *fy_concat(const char *a, const char *b) __attribute__((unused));\n");
     fprintf(out, "static const char *fy_concat(const char *a, const char *b) {\n");
     fprintf(out, "    size_t la = strlen(a), lb = strlen(b);\n");
@@ -900,6 +1048,7 @@ int codegen_emit(Program *prog, const char *out_path, Diag *diag) {
     emit_shape_builtins(out);
     emit_math_builtins(out);
     emit_string_builtins(out);
+    if (prog->uses_sdl) emit_sdl_builtins(out);
 
     for (int i = 0; i < prog->global_count; i++) {
         Stmt *g = prog->globals[i];

@@ -112,6 +112,8 @@ typedef struct Program {
     int struct_count;
     Stmt **globals; /* each a STMT_LET; visible to every function */
     int global_count;
+    int uses_sdl; /* set by sema when a window/gfx/input/timing builtin is called
+                     anywhere -- tells codegen/main.c whether SDL2 is needed at all */
 } Program;
 
 /* Struct name lookups need the Program in scope; set once, right after

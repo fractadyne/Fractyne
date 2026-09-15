@@ -2,7 +2,8 @@
 
 Fractyne is a small statically-typed language whose compiler is written entirely in C. It
 compiles `.fy` source to C, then invokes `gcc` to produce a native binary — no Python, no
-interpreter, no runtime dependency beyond a C compiler.
+interpreter, no runtime dependency beyond a C compiler (SDL2 is needed too, but only for
+programs that use the window/graphics builtins — see below).
 
 ## Install
 
@@ -152,9 +153,9 @@ Type conversion builtins (ordinary function-call syntax, resolved before user fu
 `int_to_string`, `float_to_string`, `bool_to_string`, `string_to_int`, `string_to_float`,
 `int_to_float`, `float_to_int`.
 
-Shape builtins — print ASCII art to stdout; there's no windowing dependency in this
-project, so these draw with `*` rather than opening a window:
-`draw_square(n)`, `draw_rect(w, h)`, `draw_triangle(n)`.
+Shape builtins — print ASCII art to stdout, no window or SDL2 needed:
+`draw_square(n)`, `draw_rect(w, h)`, `draw_triangle(n)`. (For an actual window with actual
+shapes, see "Windows and graphics" below.)
 
 Math builtins: `sqrt`, `pow` (both `float`), `abs_int`, `abs_float`, `min_int`, `max_int`,
 `min_float`, `max_float`.
@@ -168,5 +169,37 @@ immutable — `s[i] = ...` is rejected at compile time. Also `substring(s, start
 I/O: `input()` reads one line from stdin (no trailing newline) and returns it as a
 `string`; at EOF it returns `""`. Not covered by `make test`, since the harness doesn't
 feed stdin to each example — try it directly, e.g. `echo Ada | ./examples/some_program`.
+
+## Windows and graphics
+
+Real windows, not ASCII art — backed by SDL2. This is the one part of Fractyne with a
+dependency beyond a C compiler, and it's opt-in: `fractyne` only adds `#include <SDL2/SDL.h>`
+and links `-lSDL2` into a program's generated C if that program actually calls one of these
+builtins, so every other program (including everything else in `examples/`) stays exactly as
+dependency-free as before. If you use one of these, install SDL2's development package first
+(`libsdl2-dev` on Debian/Ubuntu, `sdl2` on Arch, `SDL2-devel` on Fedora, or `brew install sdl2`
+on macOS) — `fractyne` will tell you if gcc can't find it.
+
+There's a single window at a time (no handle/pointer type to address more than one), and
+colors are always `int` 0–255 per channel:
+
+- `window_open(width, height, title) -> bool` — returns `false` if it couldn't open a window
+  (e.g. no display available); `window_close()`
+- `window_should_close() -> bool` — true once the user clicks the window's close button;
+  `window_poll_events();` — pumps input/close events, call this once per frame
+- `window_clear(r, g, b);` — fill the window with a color; `window_present();` — show what's
+  been drawn since the last clear (drawing is double-buffered, so nothing appears until this
+  is called)
+- `gfx_set_color(r, g, b);` sets the color used by every draw call below, until changed again
+- `gfx_pixel(x, y);`, `gfx_line(x1, y1, x2, y2);`, `gfx_rect(x, y, w, h);` (filled),
+  `gfx_circle(cx, cy, radius);` (filled)
+- `key_down(name) -> bool` — e.g. `"escape"`, `"a"`, `"up"`, `"space"` (SDL scancode names);
+  `mouse_x() -> int`, `mouse_y() -> int`, `mouse_down(button) -> bool` — `"left"`, `"right"`,
+  or `"middle"`
+- `delay_ms(ms);` — pace the frame rate; `ticks_ms() -> int` — milliseconds since program start
+
+See `examples/window.fy` for a small animated demo. It's not part of `make test` (opening a
+real window isn't something a stdout diff can check) — run it yourself:
+`fractyne run examples/window.fy`.
 
 See `examples/` for sample programs covering each feature.

@@ -113,6 +113,7 @@ static Type check_builtin_call(Sema *sm, Scope *sc, Expr *e, const Builtin *b) {
             return TYPE_UNKNOWN;
         }
     }
+    if (b->needs_sdl) sm->prog->uses_sdl = 1;
     return b->return_type;
 }
 
