@@ -132,6 +132,14 @@ static void lex_ident_or_keyword(Lexer *lx) {
 }
 
 int lex(const char *source, TokenList *out, Diag *diag) {
+    /* Some editors write a UTF-8 byte-order mark at the very start of a
+     * file; it's invisible in the editor, so silently skip it rather than
+     * fail with a baffling "unexpected character" on line 1. */
+    if ((unsigned char)source[0] == 0xEF && (unsigned char)source[1] == 0xBB &&
+        (unsigned char)source[2] == 0xBF) {
+        source += 3;
+    }
+
     Lexer lx = {0};
     lx.src = source;
     lx.len = strlen(source);
