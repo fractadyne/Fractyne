@@ -670,16 +670,45 @@ static Stmt *parse_statement(Parser *p) {
             TokenType next = p->tokens->tokens[p->pos + 1].type;
             if (is_assign_token(next)) return parse_assign_stmt(p, 1);
             if (next == TOK_DOT) {
+                /* `a.b.c = v;` -- an arbitrary chain of field reads (each
+                 * wrapped as an EXPR_FIELD base) ending in one field to
+                 * actually assign into. Look one field ahead at a time: as
+                 * long as another '.' follows, the field just read is a
+                 * read, not the assignment target. */
                 int line = cur(p)->line;
                 Token *name = advance_tok(p);
+                Expr *base = expr_new_var(name->text, line);
                 advance_tok(p); /* '.' */
                 Token *field = expect(p, TOK_IDENT, "a field name");
-                if (field == NULL) return NULL;
-                if (expect(p, TOK_ASSIGN, "'=' after field") == NULL) return NULL;
+                if (field == NULL) { expr_free(base); return NULL; }
+                char *field_name = dup_str(field->text);
+                while (check(p, TOK_DOT)) {
+                    base = expr_new_field(base, field_name, line);
+                    free(field_name);
+                    advance_tok(p); /* '.' */
+                    Token *next_field = expect(p, TOK_IDENT, "a field name");
+                    if (next_field == NULL) { expr_free(base); return NULL; }
+                    field_name = dup_str(next_field->text);
+                }
+                if (expect(p, TOK_ASSIGN, "'=' after field") == NULL) {
+                    expr_free(base);
+                    free(field_name);
+                    return NULL;
+                }
                 Expr *value = parse_expr(p);
-                if (value == NULL || p->diag->has_error) return NULL;
-                if (expect(p, TOK_SEMI, "';' after assignment") == NULL) return NULL;
-                return stmt_new_field_assign(name->text, field->text, value, line);
+                if (value == NULL || p->diag->has_error) {
+                    expr_free(base);
+                    free(field_name);
+                    return NULL;
+                }
+                if (expect(p, TOK_SEMI, "';' after assignment") == NULL) {
+                    expr_free(base);
+                    free(field_name);
+                    return NULL;
+                }
+                Stmt *result = stmt_new_field_assign(base, field_name, value, line);
+                free(field_name);
+                return result;
             }
             if (next == TOK_LBRACKET) {
                 int line = cur(p)->line;

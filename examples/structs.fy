@@ -30,4 +30,8 @@ fr main() {
     let p3 = make_point(10, 20);
     p3.x = 99;
     output(p3.x);
+
+    line.start.x = 42;
+    output(line.start.x);
+    output(line.start.y);
 }

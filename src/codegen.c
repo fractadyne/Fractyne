@@ -1260,7 +1260,8 @@ static void emit_stmt(FILE *out, int level, Stmt *s, int in_main) {
             return;
         case STMT_FIELD_ASSIGN:
             indent(out, level);
-            fprintf(out, "%s.%s = ", s->as.field_assign_stmt.name, s->as.field_assign_stmt.field);
+            emit_expr(out, s->as.field_assign_stmt.base);
+            fprintf(out, ".%s = ", s->as.field_assign_stmt.field);
             emit_expr(out, s->as.field_assign_stmt.value);
             fprintf(out, ";\n");
             return;

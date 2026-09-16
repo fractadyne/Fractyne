@@ -752,13 +752,8 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
             return;
         }
         case STMT_FIELD_ASSIGN: {
-            int found;
-            Type declared = scope_lookup(sc, s->as.field_assign_stmt.name, &found);
-            if (!found) {
-                diag_set(sm->diag, s->line, "assignment to undeclared variable '%s'",
-                         s->as.field_assign_stmt.name);
-                return;
-            }
+            Type declared = check_expr(sm, sc, s->as.field_assign_stmt.base);
+            if (sm->diag->has_error) return;
             if (!type_is_struct(declared)) {
                 diag_set(sm->diag, s->line, "cannot access field '%s' on %s",
                          s->as.field_assign_stmt.field, type_name(declared));

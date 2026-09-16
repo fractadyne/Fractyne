@@ -163,8 +163,8 @@ Structs:
   declared in any order relative to where they're used, including fields of other structs
 - `Name { field: value, ... }` — a literal; must set every declared field exactly once, in
   any order (not just declaration order)
-- `value.field` — read; `name.field = value;` — write (the target must be a plain variable,
-  not a nested expression — `a.b.c = 1` isn't supported, only reading nested fields is)
+- `value.field` — read; `target.field = value;` — write, where `target` can itself be a
+  field chain (`a.b.c = 1` writes to `c` on `a.b`, working through any depth of nested structs)
 - Structs are ordinary value types like everything else: passed by value, fields can be any
   type including another struct, enum, or a list/map, but not a list/map of structs
 

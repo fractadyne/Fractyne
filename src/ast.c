@@ -445,9 +445,9 @@ Stmt *stmt_new_index_assign(const char *name, Expr *index, Expr *value, int line
     return s;
 }
 
-Stmt *stmt_new_field_assign(const char *name, const char *field, Expr *value, int line) {
+Stmt *stmt_new_field_assign(Expr *base, const char *field, Expr *value, int line) {
     Stmt *s = stmt_new(STMT_FIELD_ASSIGN, line);
-    s->as.field_assign_stmt.name = dup_str(name);
+    s->as.field_assign_stmt.base = base;
     s->as.field_assign_stmt.field = dup_str(field);
     s->as.field_assign_stmt.value = value;
     return s;
@@ -527,7 +527,7 @@ void stmt_free(Stmt *s) {
             expr_free(s->as.index_assign_stmt.value);
             break;
         case STMT_FIELD_ASSIGN:
-            free(s->as.field_assign_stmt.name);
+            expr_free(s->as.field_assign_stmt.base);
             free(s->as.field_assign_stmt.field);
             expr_free(s->as.field_assign_stmt.value);
             break;

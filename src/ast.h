@@ -109,7 +109,7 @@ typedef struct Stmt {
         struct { Expr *expr; } expr_stmt;
         struct { char *name; Expr *value; } push_stmt;
         struct { char *name; Expr *index; Expr *value; } index_assign_stmt;
-        struct { char *name; char *field; Expr *value; } field_assign_stmt;
+        struct { Expr *base; char *field; Expr *value; } field_assign_stmt;
         struct { char *name; Type resolved_type; } sort_stmt;
         struct { char *name; Type resolved_type; } reverse_stmt;
         struct { char *name; Expr *index; Type resolved_type; } remove_stmt;
@@ -183,7 +183,7 @@ Stmt *stmt_new_block(Stmt **stmts, int count, int line);
 Stmt *stmt_new_expr(Expr *expr, int line);
 Stmt *stmt_new_push(const char *name, Expr *value, int line);
 Stmt *stmt_new_index_assign(const char *name, Expr *index, Expr *value, int line);
-Stmt *stmt_new_field_assign(const char *name, const char *field, Expr *value, int line);
+Stmt *stmt_new_field_assign(Expr *base, const char *field, Expr *value, int line);
 Stmt *stmt_new_sort(const char *name, int line);
 Stmt *stmt_new_reverse(const char *name, int line);
 Stmt *stmt_new_remove(const char *name, Expr *index, int line);
