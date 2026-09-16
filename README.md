@@ -62,6 +62,12 @@ stdin/stdout/stderr and exit code, then deletes the scratch directory — unlike
 this leaves nothing behind next to your source. Put `bin/` on your `PATH` to use this from
 anywhere: `fractyne run whatever.fy`.
 
+Anything after the source file is forwarded to the compiled program itself, readable from
+inside the program with `launch_args()`: `fractyne run whatever.fy foo bar` runs the program
+with `launch_args()` returning `["foo", "bar"]`. A binary built with `build` takes its own
+arguments directly (`./whatever foo bar`) — no forwarding needed since there's no wrapper
+in the way.
+
 ## Run the test suite
 
 ```sh
@@ -152,7 +158,19 @@ Structs:
 - `value.field` — read; `name.field = value;` — write (the target must be a plain variable,
   not a nested expression — `a.b.c = 1` isn't supported, only reading nested fields is)
 - Structs are ordinary value types like everything else: passed by value, fields can be any
-  type including another struct or a list/map, but not a list/map of structs
+  type including another struct, enum, or a list/map, but not a list/map of structs
+
+Enums:
+
+- `enum Name { Member1, Member2, ... }` at the top level — can be declared in any order
+  relative to where it's used, same as structs
+- `Name.Member` — refers to one member; usable anywhere a value is expected (`let`,
+  function params/returns, struct fields, `output()`)
+- `==`/`!=` work between two values of the *same* enum (comparing values of two different
+  enums is a compile error, same as any other type mismatch); no ordering (`< > <= >=`) and
+  no `list<SomeEnum>` yet
+- `output(x)` on an enum value prints the member's own name (e.g. `Red`), not a number
+- Unlike structs, an enum can't be used as a list element yet
 
 Type conversion builtins (ordinary function-call syntax, resolved before user functions):
 `int_to_string`, `float_to_string`, `bool_to_string`, `string_to_int`, `string_to_float`,
@@ -183,6 +201,10 @@ File I/O: `read_file(path) -> string` (returns `""` if the file doesn't exist or
 read — no exceptions in Fractyne, so this mirrors `input()`'s EOF behavior rather than
 crashing), `write_file(path, content) -> bool` (overwrites; `bool` reports success),
 `append_file(path, content) -> bool`, `file_exists(path) -> bool`. See `examples/files.fy`.
+
+`launch_args() -> list<string>` — the arguments the program was launched with (not including
+the program's own name/path). See `examples/args.fy`, and "Run a program in one step" above
+for how `fractyne run` forwards its own trailing arguments into this.
 
 ## Windows and graphics
 

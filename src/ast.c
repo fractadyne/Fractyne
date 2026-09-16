@@ -9,13 +9,21 @@ static const Program *g_program = NULL;
 void type_system_set_program(const Program *prog) { g_program = prog; }
 
 int type_is_struct(Type t) { return t >= TYPE_STRUCT_BASE && t < TYPE_LIST_STRUCT_BASE; }
-int type_is_list_of_struct(Type t) { return t >= TYPE_LIST_STRUCT_BASE; }
+int type_is_list_of_struct(Type t) { return t >= TYPE_LIST_STRUCT_BASE && t < TYPE_ENUM_BASE; }
+int type_is_enum(Type t) { return t >= TYPE_ENUM_BASE; }
 
 const StructDecl *struct_decl_for(Type t) {
     if (!type_is_struct(t) || g_program == NULL) return NULL;
     int index = t - TYPE_STRUCT_BASE;
     if (index < 0 || index >= g_program->struct_count) return NULL;
     return g_program->structs[index];
+}
+
+const EnumDecl *enum_decl_for(Type t) {
+    if (!type_is_enum(t) || g_program == NULL) return NULL;
+    int index = t - TYPE_ENUM_BASE;
+    if (index < 0 || index >= g_program->enum_count) return NULL;
+    return g_program->enums[index];
 }
 
 /* type_name() must stay safe to call twice in one diagnostic's format string
@@ -28,6 +36,10 @@ const char *type_name(Type t) {
     if (type_is_struct(t)) {
         const StructDecl *sd = struct_decl_for(t);
         return sd != NULL ? sd->name : "<unknown struct>";
+    }
+    if (type_is_enum(t)) {
+        const EnumDecl *ed = enum_decl_for(t);
+        return ed != NULL ? ed->name : "<unknown enum>";
     }
     if (type_is_list_of_struct(t)) {
         static char bufs[4][160];
@@ -254,6 +266,13 @@ Expr *expr_new_contains(Expr *list, Expr *value, int line) {
     return e;
 }
 
+Expr *expr_new_enum_member(const char *enum_name, const char *member_name, int line) {
+    Expr *e = expr_new(EXPR_ENUM_MEMBER, line);
+    e->as.enum_member.enum_name = dup_str(enum_name);
+    e->as.enum_member.member_name = dup_str(member_name);
+    return e;
+}
+
 void expr_free(Expr *e) {
     if (e == NULL) return;
     switch (e->kind) {
@@ -317,6 +336,10 @@ void expr_free(Expr *e) {
         case EXPR_CONTAINS:
             expr_free(e->as.contains.list);
             expr_free(e->as.contains.value);
+            break;
+        case EXPR_ENUM_MEMBER:
+            free(e->as.enum_member.enum_name);
+            free(e->as.enum_member.member_name);
             break;
     }
     free(e);
@@ -552,6 +575,22 @@ void struct_decl_free(StructDecl *s) {
     free(s);
 }
 
+EnumDecl *enum_decl_new(const char *name, char **members, int member_count) {
+    EnumDecl *e = calloc(1, sizeof(EnumDecl));
+    e->name = dup_str(name);
+    e->members = members;
+    e->member_count = member_count;
+    return e;
+}
+
+void enum_decl_free(EnumDecl *e) {
+    if (e == NULL) return;
+    free(e->name);
+    for (int i = 0; i < e->member_count; i++) free(e->members[i]);
+    free(e->members);
+    free(e);
+}
+
 Program *program_new(void) {
     Program *p = calloc(1, sizeof(Program));
     return p;
@@ -567,6 +606,11 @@ void program_add_struct(Program *p, StructDecl *s) {
     p->structs[p->struct_count++] = s;
 }
 
+void program_add_enum(Program *p, EnumDecl *e) {
+    p->enums = realloc(p->enums, (size_t)(p->enum_count + 1) * sizeof(EnumDecl *));
+    p->enums[p->enum_count++] = e;
+}
+
 void program_add_global(Program *p, Stmt *g) {
     p->globals = realloc(p->globals, (size_t)(p->global_count + 1) * sizeof(Stmt *));
     p->globals[p->global_count++] = g;
@@ -578,6 +622,8 @@ void program_free(Program *p) {
     free(p->functions);
     for (int i = 0; i < p->struct_count; i++) struct_decl_free(p->structs[i]);
     free(p->structs);
+    for (int i = 0; i < p->enum_count; i++) enum_decl_free(p->enums[i]);
+    free(p->enums);
     for (int i = 0; i < p->global_count; i++) stmt_free(p->globals[i]);
     free(p->globals);
     free(p);

@@ -61,6 +61,8 @@ static const Builtin BUILTINS[] = {
     {"write_file", 2, {TYPE_STRING, TYPE_STRING}, TYPE_BOOL, 0},
     {"append_file", 2, {TYPE_STRING, TYPE_STRING}, TYPE_BOOL, 0},
     {"file_exists", 1, {TYPE_STRING}, TYPE_BOOL, 0},
+
+    {"launch_args", 0, {0}, TYPE_LIST_STRING, 0},
 };
 #define BUILTIN_COUNT (sizeof(BUILTINS) / sizeof(BUILTINS[0]))
 

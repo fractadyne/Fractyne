@@ -68,6 +68,11 @@ static const char *c_type_name(Type t) {
                 snprintf(struct_buf, sizeof(struct_buf), "FyStruct_%s", sd->name);
                 return struct_buf;
             }
+            if (type_is_enum(t)) {
+                const EnumDecl *ed = enum_decl_for(t);
+                snprintf(struct_buf, sizeof(struct_buf), "FyEnum_%s", ed->name);
+                return struct_buf;
+            }
             if (type_is_list_of_struct(t)) {
                 const StructDecl *sd = struct_decl_for(list_elem(t));
                 snprintf(struct_buf, sizeof(struct_buf), "FyListStruct_%s", sd->name);
@@ -351,6 +356,33 @@ static void emit_struct_list_wrapper(FILE *out, const StructDecl *sd) {
         "    l->len--;\n"
         "}\n\n",
         sd->name, sd->name, sd->name, sd->name);
+}
+
+/* Enums have no field dependencies, so they can all be emitted up front, in
+ * declaration order, with no ordering dance like emit_struct_typedefs below
+ * needs. Each member becomes a C enum constant named <EnumName>_<Member>
+ * (kept apart from the AST's ExprKind naming) so two different Fractyne
+ * enums can each have a same-named member without colliding in the
+ * generated C. A parallel string table lets output() print a member's own
+ * name (see emit_output) since a plain C enum has no such lookup built in. */
+static void emit_enum_typedefs(FILE *out, Program *prog) {
+    for (int i = 0; i < prog->enum_count; i++) {
+        EnumDecl *ed = prog->enums[i];
+        fprintf(out, "typedef enum { ");
+        for (int j = 0; j < ed->member_count; j++) {
+            if (j > 0) fprintf(out, ", ");
+            fprintf(out, "%s_%s", ed->name, ed->members[j]);
+        }
+        fprintf(out, " } FyEnum_%s;\n", ed->name);
+
+        fprintf(out, "static const char *fy_enum_names_%s[] __attribute__((unused)) = {", ed->name);
+        for (int j = 0; j < ed->member_count; j++) {
+            if (j > 0) fprintf(out, ", ");
+            fprintf(out, "\"%s\"", ed->members[j]);
+        }
+        fprintf(out, "};\n");
+    }
+    if (prog->enum_count > 0) fprintf(out, "\n");
 }
 
 /* Struct typedefs must appear after any struct-typed (or list-of-that-struct
@@ -645,6 +677,30 @@ static void emit_file_builtins(FILE *out) {
         "    if (f == NULL) return 0;\n"
         "    fclose(f);\n"
         "    return 1;\n"
+        "}\n\n");
+}
+
+/* fy_cli_args is only populated when the program calls launch_args() (see
+ * Program.uses_args): codegen only gives generated main() an (argc, argv) it
+ * can read from otherwise, so leaving this always-declared-but-unpopulated
+ * for programs that don't use it stays harmless and warning-free. */
+static void emit_args_builtins(FILE *out) {
+    fprintf(out, "static FyListString fy_cli_args;\n");
+    fprintf(out,
+        "static void fy_init_launch_args(int argc, char **argv) __attribute__((unused));\n"
+        "static void fy_init_launch_args(int argc, char **argv) {\n"
+        "    long n = argc > 1 ? (long)argc - 1 : 0;\n"
+        "    const char **data = malloc((size_t)(n > 0 ? n : 1) * sizeof(const char *));\n"
+        "    for (long i = 0; i < n; i++) data[i] = argv[i + 1];\n"
+        "    fy_cli_args.data = data;\n"
+        "    fy_cli_args.len = n;\n"
+        "    fy_cli_args.cap = n;\n"
+        "}\n\n");
+
+    fprintf(out,
+        "static FyListString fy_launch_args(void) __attribute__((unused));\n"
+        "static FyListString fy_launch_args(void) {\n"
+        "    return fy_cli_args;\n"
         "}\n\n");
 }
 
@@ -974,6 +1030,9 @@ static void emit_expr(FILE *out, Expr *e) {
             fprintf(out, ")");
             return;
         }
+        case EXPR_ENUM_MEMBER:
+            fprintf(out, "%s_%s", e->as.enum_member.enum_name, e->as.enum_member.member_name);
+            return;
     }
 }
 
@@ -983,6 +1042,13 @@ static void indent(FILE *out, int level) {
 
 static void emit_output(FILE *out, int level, Expr *value) {
     indent(out, level);
+    if (type_is_enum(value->type)) {
+        const EnumDecl *ed = enum_decl_for(value->type);
+        fprintf(out, "printf(\"%%s\\n\", fy_enum_names_%s[(int)(", ed->name);
+        emit_expr(out, value);
+        fprintf(out, ")]);\n");
+        return;
+    }
     switch (value->type) {
         case TYPE_INT:
             fprintf(out, "printf(\"%%ld\\n\", ");
@@ -1191,10 +1257,10 @@ static void emit_stmt(FILE *out, int level, Stmt *s, int in_main) {
     }
 }
 
-static void emit_signature(FILE *out, FunctionDecl *f) {
+static void emit_signature(FILE *out, FunctionDecl *f, int uses_args) {
     char buf[256];
     if (strcmp(f->name, "main") == 0) {
-        fprintf(out, "int main(void)");
+        fprintf(out, uses_args ? "int main(int argc, char *argv[])" : "int main(void)");
         return;
     }
     fprintf(out, "%s %s(", c_type_name(f->return_type), c_func_name(f->name, buf, sizeof(buf)));
@@ -1209,10 +1275,13 @@ static void emit_signature(FILE *out, FunctionDecl *f) {
     fprintf(out, ")");
 }
 
-static void emit_function(FILE *out, FunctionDecl *f) {
+static void emit_function(FILE *out, FunctionDecl *f, int uses_args) {
     int in_main = strcmp(f->name, "main") == 0;
-    emit_signature(out, f);
+    emit_signature(out, f, uses_args);
     fprintf(out, "\n{\n");
+    if (in_main && uses_args) {
+        fprintf(out, "    fy_init_launch_args(argc, argv);\n");
+    }
     for (int i = 0; i < f->body->as.block.count; i++) {
         emit_stmt(out, 1, f->body->as.block.stmts[i], in_main);
     }
@@ -1258,6 +1327,7 @@ int codegen_emit(Program *prog, const char *out_path, Diag *diag) {
 
     emit_list_runtime(out);
     emit_map_runtime(out);
+    emit_enum_typedefs(out, prog);
     emit_struct_typedefs(out, prog);
     emit_conversion_builtins(out);
     emit_shape_builtins(out);
@@ -1265,6 +1335,7 @@ int codegen_emit(Program *prog, const char *out_path, Diag *diag) {
     emit_string_builtins(out);
     emit_random_builtins(out);
     emit_file_builtins(out);
+    emit_args_builtins(out);
     if (prog->uses_sdl) emit_sdl_builtins(out);
 
     for (int i = 0; i < prog->global_count; i++) {
@@ -1278,17 +1349,19 @@ int codegen_emit(Program *prog, const char *out_path, Diag *diag) {
     for (int i = 0; i < prog->count; i++) {
         FunctionDecl *f = prog->functions[i];
         if (strcmp(f->name, "main") == 0) continue;
-        emit_signature(out, f);
+        emit_signature(out, f, 0);
         fprintf(out, ";\n");
     }
     fprintf(out, "\n");
 
     for (int i = 0; i < prog->count; i++) {
         if (strcmp(prog->functions[i]->name, "main") == 0) continue;
-        emit_function(out, prog->functions[i]);
+        emit_function(out, prog->functions[i], 0);
     }
     for (int i = 0; i < prog->count; i++) {
-        if (strcmp(prog->functions[i]->name, "main") == 0) emit_function(out, prog->functions[i]);
+        if (strcmp(prog->functions[i]->name, "main") == 0) {
+            emit_function(out, prog->functions[i], prog->uses_args);
+        }
     }
 
     fclose(out);

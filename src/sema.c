@@ -69,6 +69,20 @@ static int find_struct_index(Sema *sm, const char *name) {
     return -1;
 }
 
+static int find_enum_index(Sema *sm, const char *name) {
+    for (int i = 0; i < sm->prog->enum_count; i++) {
+        if (strcmp(sm->prog->enums[i]->name, name) == 0) return i;
+    }
+    return -1;
+}
+
+static int find_enum_member_index(const EnumDecl *ed, const char *name) {
+    for (int i = 0; i < ed->member_count; i++) {
+        if (strcmp(ed->members[i], name) == 0) return i;
+    }
+    return -1;
+}
+
 static const Param *find_struct_field(const StructDecl *sd, const char *name) {
     for (int i = 0; i < sd->field_count; i++) {
         if (strcmp(sd->fields[i].name, name) == 0) return &sd->fields[i];
@@ -114,6 +128,7 @@ static Type check_builtin_call(Sema *sm, Scope *sc, Expr *e, const Builtin *b) {
         }
     }
     if (b->needs_sdl) sm->prog->uses_sdl = 1;
+    if (strcmp(b->name, "launch_args") == 0) sm->prog->uses_args = 1;
     return b->return_type;
 }
 
@@ -434,6 +449,21 @@ static Type check_expr(Sema *sm, Scope *sc, Expr *e) {
                 return TYPE_UNKNOWN;
             }
             e->type = then_type;
+            return e->type;
+        }
+        case EXPR_ENUM_MEMBER: {
+            int enum_idx = find_enum_index(sm, e->as.enum_member.enum_name);
+            if (enum_idx < 0) {
+                diag_set(sm->diag, e->line, "unknown enum '%s'", e->as.enum_member.enum_name);
+                return TYPE_UNKNOWN;
+            }
+            const EnumDecl *ed = sm->prog->enums[enum_idx];
+            if (find_enum_member_index(ed, e->as.enum_member.member_name) < 0) {
+                diag_set(sm->diag, e->line, "enum '%s' has no member '%s'",
+                         ed->name, e->as.enum_member.member_name);
+                return TYPE_UNKNOWN;
+            }
+            e->type = TYPE_ENUM_BASE + enum_idx;
             return e->type;
         }
         case EXPR_CONTAINS: {
@@ -787,6 +817,28 @@ int sema_check(Program *prog, Diag *diag) {
             for (int k = 0; k < j; k++) {
                 if (strcmp(sd->fields[j].name, sd->fields[k].name) == 0) {
                     diag_set(diag, 0, "struct '%s' has field '%s' twice", sd->name, sd->fields[j].name);
+                    return 0;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < prog->enum_count; i++) {
+        EnumDecl *ed = prog->enums[i];
+        for (int j = 0; j < i; j++) {
+            if (strcmp(prog->enums[j]->name, ed->name) == 0) {
+                diag_set(diag, 0, "enum '%s' is already declared", ed->name);
+                return 0;
+            }
+        }
+        if (ed->member_count == 0) {
+            diag_set(diag, 0, "enum '%s' has no members", ed->name);
+            return 0;
+        }
+        for (int j = 0; j < ed->member_count; j++) {
+            for (int k = 0; k < j; k++) {
+                if (strcmp(ed->members[j], ed->members[k]) == 0) {
+                    diag_set(diag, 0, "enum '%s' has member '%s' twice", ed->name, ed->members[j]);
                     return 0;
                 }
             }

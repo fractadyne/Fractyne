@@ -20,6 +20,7 @@ typedef struct {
     int pos;
     Diag *diag;
     PtrList *struct_names; /* borrowed; names of every `struct X` in the file, pre-scanned */
+    PtrList *enum_names;   /* borrowed; names of every `enum X` in the file, pre-scanned */
 } Parser;
 
 static int is_struct_name(Parser *p, const char *name) {
@@ -34,6 +35,13 @@ static int struct_index_of(Parser *p, const char *name) {
         if (strcmp((char *)p->struct_names->items[i], name) == 0) return i;
     }
     return -1;
+}
+
+static int is_enum_name(Parser *p, const char *name) {
+    for (int i = 0; i < p->enum_names->count; i++) {
+        if (strcmp((char *)p->enum_names->items[i], name) == 0) return 1;
+    }
+    return 0;
 }
 
 static Token *cur(Parser *p) { return &p->tokens->tokens[p->pos]; }
@@ -112,6 +120,12 @@ static Expr *parse_primary(Parser *p) {
                 Expr **args = parse_call_args(p, &arg_count);
                 if (p->diag->has_error) return NULL;
                 return expr_new_call(t->text, args, arg_count, t->line);
+            }
+            if (check(p, TOK_DOT) && is_enum_name(p, t->text)) {
+                advance_tok(p); /* '.' */
+                Token *member = expect(p, TOK_IDENT, "an enum member name");
+                if (member == NULL) return NULL;
+                return expr_new_enum_member(t->text, member->text, t->line);
             }
             if (check(p, TOK_LBRACE) && is_struct_name(p, t->text)) {
                 advance_tok(p); /* '{' */
@@ -602,6 +616,23 @@ static int parse_element_type(Parser *p, Type *out) {
     return parse_primitive_type(p, out);
 }
 
+/* Enum names are only accepted as a bare type (function params/returns,
+ * struct fields, `let`-inferred types come from expressions instead) --
+ * unlike structs, there's no list<SomeEnum> yet, so this isn't threaded
+ * into parse_element_type. */
+static int parse_type_token_or_enum(Parser *p, Type *out) {
+    if (check(p, TOK_IDENT) && is_enum_name(p, cur(p)->text)) {
+        for (int i = 0; i < p->enum_names->count; i++) {
+            if (strcmp((char *)p->enum_names->items[i], cur(p)->text) == 0) {
+                *out = TYPE_ENUM_BASE + i;
+                advance_tok(p);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 static int parse_type_token(Parser *p, Type *out) {
     if (check(p, TOK_TYPE_LIST)) {
         advance_tok(p);
@@ -628,6 +659,7 @@ static int parse_type_token(Parser *p, Type *out) {
         advance_tok(p);
         return 1;
     }
+    if (parse_type_token_or_enum(p, out)) return 1;
     return parse_primitive_type(p, out);
 }
 
@@ -712,14 +744,44 @@ void collect_struct_names(TokenList *tokens, PtrList *names) {
     }
 }
 
+/* Same reasoning as collect_struct_names, for `enum Name { ... }`: needed
+ * before real parsing so `Name.Member` can be recognized as enum-member
+ * access rather than a field access on an undeclared variable. */
+void collect_enum_names(TokenList *tokens, PtrList *names) {
+    for (int i = 0; i + 1 < tokens->count; i++) {
+        if (tokens->tokens[i].type == TOK_ENUM && tokens->tokens[i + 1].type == TOK_IDENT) {
+            ptrlist_push(names, tokens->tokens[i + 1].text);
+        }
+    }
+}
+
+static EnumDecl *parse_enum_decl(Parser *p) {
+    advance_tok(p); /* 'enum' */
+    Token *name = expect(p, TOK_IDENT, "an enum name");
+    if (name == NULL) return NULL;
+    if (expect(p, TOK_LBRACE, "'{' after enum name") == NULL) return NULL;
+    PtrList members;
+    ptrlist_init(&members);
+    if (!check(p, TOK_RBRACE)) {
+        do {
+            Token *member = expect(p, TOK_IDENT, "an enum member name");
+            if (member == NULL) return NULL;
+            ptrlist_push(&members, dup_str(member->text));
+        } while (match_tok(p, TOK_COMMA));
+    }
+    if (expect(p, TOK_RBRACE, "'}' after enum members") == NULL) return NULL;
+    return enum_decl_new(name->text, (char **)members.items, members.count);
+}
+
 /* Parses one file's top-level declarations into prog, using a struct-name
  * list the caller already built -- when `involve` pulls in more than one
  * file, that list covers all of them, collected up front (see involve.c),
  * so a struct can be referenced regardless of which file declares it. Any
  * `involve "...";` here is only checked for syntax: resolving and loading
  * the file it names already happened before this function runs. */
-int parse_file_into_program(TokenList *tokens, PtrList *struct_names, Program *prog, Diag *diag) {
-    Parser p = {tokens, 0, diag, struct_names};
+int parse_file_into_program(TokenList *tokens, PtrList *struct_names, PtrList *enum_names,
+                             Program *prog, Diag *diag) {
+    Parser p = {tokens, 0, diag, struct_names, enum_names};
     while (!check(&p, TOK_EOF)) {
         if (check(&p, TOK_INVOLVE)) {
             advance_tok(&p); /* 'involve' */
@@ -733,6 +795,12 @@ int parse_file_into_program(TokenList *tokens, PtrList *struct_names, Program *p
             program_add_struct(prog, s);
             continue;
         }
+        if (check(&p, TOK_ENUM)) {
+            EnumDecl *e = parse_enum_decl(&p);
+            if (e == NULL || diag->has_error) return 0;
+            program_add_enum(prog, e);
+            continue;
+        }
         if (check(&p, TOK_LET)) {
             Stmt *g = parse_let(&p);
             if (g == NULL || diag->has_error) return 0;
@@ -741,7 +809,7 @@ int parse_file_into_program(TokenList *tokens, PtrList *struct_names, Program *p
         }
         if (!check(&p, TOK_FR)) {
             diag_set(diag, cur(&p)->line,
-                     "expected a function, struct, involve, or global declaration but found %s",
+                     "expected a function, struct, enum, involve, or global declaration but found %s",
                      token_type_name(cur(&p)->type));
             return 0;
         }

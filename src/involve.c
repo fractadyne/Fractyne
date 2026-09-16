@@ -148,10 +148,12 @@ Program *load_program(const char *entry_path, Diag *diag) {
         return NULL;
     }
 
-    PtrList struct_names;
+    PtrList struct_names, enum_names;
     ptrlist_init(&struct_names);
+    ptrlist_init(&enum_names);
     for (int i = 0; i < files.count; i++) {
         collect_struct_names(&((FileUnit *)files.items[i])->tokens, &struct_names);
+        collect_enum_names(&((FileUnit *)files.items[i])->tokens, &enum_names);
     }
 
     Program *prog = program_new();
@@ -159,12 +161,13 @@ Program *load_program(const char *entry_path, Diag *diag) {
     for (int i = 0; i < files.count && ok; i++) {
         FileUnit *fu = (FileUnit *)files.items[i];
         diag->current_file = fu->path;
-        ok = parse_file_into_program(&fu->tokens, &struct_names, prog, diag);
+        ok = parse_file_into_program(&fu->tokens, &struct_names, &enum_names, prog, diag);
     }
     diag->current_file = NULL; /* sema/codegen errors can span files; fall back to the entry path */
 
     free_files(&files);
     free(struct_names.items);
+    free(enum_names.items);
     for (int i = 0; i < visited.count; i++) free(visited.items[i]);
     free(visited.items);
 

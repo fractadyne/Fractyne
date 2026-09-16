@@ -122,16 +122,25 @@ static int cmd_build(const char *src_path) {
     return 0;
 }
 
-/* Executes an already-built binary, forwarding stdin/stdout/stderr, and
+/* Executes an already-built binary, forwarding stdin/stdout/stderr and any
+ * extra_argv (arguments given after the source file on the fractyne command
+ * line, forwarded to the compiled program's own launch_args()), and
  * propagates its exit status (128+signal if it was killed by one). */
-static int run_binary(const char *bin_path) {
+static int run_binary(const char *bin_path, char **extra_argv, int extra_argc) {
     pid_t pid = fork();
     if (pid < 0) {
         perror("fractyne: fork");
         return 1;
     }
     if (pid == 0) {
-        char *argv[] = {(char *)bin_path, NULL};
+        char **argv = malloc((size_t)(extra_argc + 2) * sizeof(char *));
+        if (argv == NULL) {
+            fprintf(stderr, "fractyne: out of memory\n");
+            _exit(127);
+        }
+        argv[0] = (char *)bin_path;
+        for (int i = 0; i < extra_argc; i++) argv[i + 1] = extra_argv[i];
+        argv[extra_argc + 1] = NULL;
         execv(bin_path, argv);
         perror("fractyne: exec");
         _exit(127);
@@ -151,7 +160,7 @@ static int run_binary(const char *bin_path) {
 /* `run` compiles into a scratch directory under TMPDIR (or /tmp) and removes
  * it afterward, regardless of outcome -- unlike `build`, it's meant to feel
  * like just executing the source, leaving nothing behind next to it. */
-static int cmd_run(const char *src_path) {
+static int cmd_run(const char *src_path, char **extra_argv, int extra_argc) {
     const char *tmp_base = getenv("TMPDIR");
     if (tmp_base == NULL || tmp_base[0] == '\0') tmp_base = "/tmp";
 
@@ -165,7 +174,9 @@ static int cmd_run(const char *src_path) {
     char c_path[4096], bin_path[4096];
     derive_output_paths(src_path, tmpl, c_path, sizeof(c_path), bin_path, sizeof(bin_path));
 
-    int result = compile_program(src_path, c_path, bin_path) ? run_binary(bin_path) : 1;
+    int result = compile_program(src_path, c_path, bin_path)
+                      ? run_binary(bin_path, extra_argv, extra_argc)
+                      : 1;
 
     remove(c_path);
     remove(bin_path);
@@ -174,10 +185,17 @@ static int cmd_run(const char *src_path) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 3 || (strcmp(argv[1], "build") != 0 && strcmp(argv[1], "run") != 0)) {
-        fprintf(stderr, "usage: fractyne build <file.fy>\n       fractyne run <file.fy>\n");
+    if (argc < 3 || (strcmp(argv[1], "build") != 0 && strcmp(argv[1], "run") != 0)) {
+        fprintf(stderr, "usage: fractyne build <file.fy>\n"
+                         "       fractyne run <file.fy> [program args...]\n");
         return 1;
     }
-    if (strcmp(argv[1], "build") == 0) return cmd_build(argv[2]);
-    return cmd_run(argv[2]);
+    if (strcmp(argv[1], "build") == 0) {
+        if (argc != 3) {
+            fprintf(stderr, "usage: fractyne build <file.fy>\n");
+            return 1;
+        }
+        return cmd_build(argv[2]);
+    }
+    return cmd_run(argv[2], argv + 3, argc - 3);
 }

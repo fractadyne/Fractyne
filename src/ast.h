@@ -31,6 +31,13 @@ Type map_value(Type map);   /* TYPE_MAP_INT -> TYPE_INT, etc. */
 int type_is_struct(Type t);
 int type_is_list_of_struct(Type t);
 
+/* Enums get their own dynamic Type range, same idea as structs above but
+ * kept well clear of TYPE_LIST_STRUCT_BASE's headroom. An enum member is
+ * just its own C enum constant under the hood (see codegen), so unlike
+ * structs, enums get ordinary equality for free -- see sema's check_binary. */
+#define TYPE_ENUM_BASE 200000
+int type_is_enum(Type t);
+
 typedef struct {
     char *name;
     Type type;
@@ -42,11 +49,17 @@ typedef struct {
     int field_count;
 } StructDecl;
 
+typedef struct {
+    char *name;
+    char **members;
+    int member_count;
+} EnumDecl;
+
 
 typedef enum {
     EXPR_INT, EXPR_FLOAT, EXPR_BOOL, EXPR_STRING, EXPR_VAR,
     EXPR_UNARY, EXPR_BINARY, EXPR_CALL, EXPR_LIST, EXPR_INDEX, EXPR_LEN, EXPR_MAP,
-    EXPR_STRUCT_LIT, EXPR_FIELD, EXPR_TERNARY, EXPR_CONTAINS
+    EXPR_STRUCT_LIT, EXPR_FIELD, EXPR_TERNARY, EXPR_CONTAINS, EXPR_ENUM_MEMBER
 } ExprKind;
 
 typedef struct Expr {
@@ -69,6 +82,7 @@ typedef struct Expr {
         struct { struct Expr *base; char *field; } field;
         struct { struct Expr *cond; struct Expr *then_val; struct Expr *else_val; } ternary;
         struct { struct Expr *list; struct Expr *value; } contains;
+        struct { char *enum_name; char *member_name; } enum_member;
     } as;
 } Expr;
 
@@ -115,10 +129,14 @@ typedef struct Program {
     int count;
     StructDecl **structs;
     int struct_count;
+    EnumDecl **enums;
+    int enum_count;
     Stmt **globals; /* each a STMT_LET; visible to every function */
     int global_count;
     int uses_sdl; /* set by sema when a window/gfx/input/timing builtin is called
                      anywhere -- tells codegen/main.c whether SDL2 is needed at all */
+    int uses_args; /* set by sema when launch_args() is called anywhere -- tells
+                      codegen whether generated main() needs to receive argc/argv */
 } Program;
 
 /* Struct name lookups need the Program in scope; set once, right after
@@ -126,6 +144,7 @@ typedef struct Program {
  * compilation per process -- there's nothing to make this reentrant for. */
 void type_system_set_program(const Program *prog);
 const StructDecl *struct_decl_for(Type t);
+const EnumDecl *enum_decl_for(Type t);
 
 /* Expr constructors */
 Expr *expr_new_int(long v, int line);
@@ -145,6 +164,7 @@ Expr *expr_new_struct_lit(const char *struct_name, char **field_names, Expr **fi
 Expr *expr_new_field(Expr *base, const char *field, int line);
 Expr *expr_new_ternary(Expr *cond, Expr *then_val, Expr *else_val, int line);
 Expr *expr_new_contains(Expr *list, Expr *value, int line);
+Expr *expr_new_enum_member(const char *enum_name, const char *member_name, int line);
 void expr_free(Expr *e);
 
 /* Stmt constructors */
@@ -174,9 +194,13 @@ void function_decl_free(FunctionDecl *f);
 StructDecl *struct_decl_new(const char *name, Param *fields, int field_count);
 void struct_decl_free(StructDecl *s);
 
+EnumDecl *enum_decl_new(const char *name, char **members, int member_count);
+void enum_decl_free(EnumDecl *e);
+
 Program *program_new(void);
 void program_add_function(Program *p, FunctionDecl *f);
 void program_add_struct(Program *p, StructDecl *s);
+void program_add_enum(Program *p, EnumDecl *e);
 void program_add_global(Program *p, Stmt *g);
 void program_free(Program *p);
 
