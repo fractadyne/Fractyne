@@ -202,11 +202,13 @@ int lex(const char *source, TokenList *out, Diag *diag) {
         switch (c) {
             case '+':
                 if (match(&lx, '=')) push_token(&lx, TOK_PLUS_ASSIGN, NULL, 0, 0, 0, line);
+                else if (match(&lx, '+')) push_token(&lx, TOK_PLUS_PLUS, NULL, 0, 0, 0, line);
                 else push_token(&lx, TOK_PLUS, NULL, 0, 0, 0, line);
                 break;
             case '-':
                 if (match(&lx, '>')) push_token(&lx, TOK_ARROW, NULL, 0, 0, 0, line);
                 else if (match(&lx, '=')) push_token(&lx, TOK_MINUS_ASSIGN, NULL, 0, 0, 0, line);
+                else if (match(&lx, '-')) push_token(&lx, TOK_MINUS_MINUS, NULL, 0, 0, 0, line);
                 else push_token(&lx, TOK_MINUS, NULL, 0, 0, 0, line);
                 break;
             case '*':
@@ -358,6 +360,8 @@ const char *token_type_name(TokenType t) {
         case TOK_STAR_ASSIGN: return "'*='";
         case TOK_SLASH_ASSIGN: return "'/='";
         case TOK_PERCENT_ASSIGN: return "'%='";
+        case TOK_PLUS_PLUS: return "'++'";
+        case TOK_MINUS_MINUS: return "'--'";
     }
     return "?";
 }

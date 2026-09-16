@@ -83,6 +83,9 @@ Builds every example that has a matching `.expected` file and diffs its output.
 - `let name = expr;` — type is inferred from the initializer and fixed thereafter
 - `name = expr;` — reassignment, must match the variable's type; also `+= -= *= /= %=`,
   each desugared to `name = name <op> expr` at parse time
+- `name++;` / `name--;` — `int`-only shorthand for `name = name + 1;` / `name = name - 1;`.
+  Statement-only sugar, not an expression (no pre/post-increment value to argue about) —
+  usable anywhere a statement is, including a for-loop's step clause
 - Arithmetic `+ - * / %` on `int`/`float`; `+` also concatenates `string`
 - Comparisons `== != < > <= >=`, logical `&& || !`. `==`/`!=` only work on `int`/`float`/
   `bool`/`string`/an enum — a list, map, or struct has no built-in equality; compare its
@@ -167,6 +170,24 @@ Structs:
   field chain (`a.b.c = 1` writes to `c` on `a.b`, working through any depth of nested structs)
 - Structs are ordinary value types like everything else: passed by value, fields can be any
   type including another struct, enum, or a list/map, but not a list/map of structs
+
+Method-call syntax — there's no separate method/`impl` declaration; `recv.name(args)` is
+sugar for `name(recv, args)`, so any ordinary `fr` function can be called this way as long as
+its first parameter's type matches `recv`'s:
+
+```
+fr move(p: Point, dx: int, dy: int) -> Point {
+    return Point { x: p.x + dx, y: p.y + dy };
+}
+
+let moved = p.move(3, 4);       // same as move(p, 3, 4)
+let chained = p.move(1, 0).move(0, 1); // chains, since move returns a Point too
+```
+
+Not limited to structs — `n.double()` works too, if `double(n: int) -> int` exists. Never
+ambiguous with a plain field read: Fractyne has no function-valued fields to call through, so
+`recv.name` followed by `(` always means a call, and followed by anything else always means a
+field read.
 
 Enums:
 

@@ -243,7 +243,25 @@ static Expr *parse_postfix(Parser *p) {
             advance_tok(p); /* '.' */
             Token *field = expect(p, TOK_IDENT, "a field name");
             if (field == NULL) return NULL;
-            base = expr_new_field(base, field->text, line);
+            if (check(p, TOK_LPAREN)) {
+                /* `recv.name(args)` -- no separate method-declaration syntax:
+                 * this is sugar for `name(recv, args)`, so any ordinary `fr`
+                 * function can be called this way as long as its first
+                 * parameter's type matches recv's. Fractyne has no
+                 * function-valued fields to call through, so seeing '(' right
+                 * after a dotted name is never ambiguous with a field read. */
+                advance_tok(p); /* '(' */
+                int arg_count = 0;
+                Expr **args = parse_call_args(p, &arg_count);
+                if (p->diag->has_error) return NULL;
+                Expr **all_args = malloc((size_t)(arg_count + 1) * sizeof(Expr *));
+                all_args[0] = base;
+                for (int i = 0; i < arg_count; i++) all_args[i + 1] = args[i];
+                free(args);
+                base = expr_new_call(field->text, all_args, arg_count + 1, line);
+            } else {
+                base = expr_new_field(base, field->text, line);
+            }
         } else {
             return base;
         }
@@ -550,6 +568,26 @@ static Stmt *parse_assign_stmt(Parser *p, int consume_semi) {
     return stmt_new_assign(name->text, value, line);
 }
 
+/* `name++` / `name--`, optionally followed by ';' -- statement-only sugar
+ * (unlike C, there's no expression form, so no pre/post-increment value
+ * question to answer) for `name = name + 1` / `name = name - 1`. Shared by
+ * plain statements and a for-loop's step clause, same as parse_assign_stmt. */
+static Stmt *parse_incdec_stmt(Parser *p, int consume_semi) {
+    int line = cur(p)->line;
+    Token *name = expect(p, TOK_IDENT, "a variable name");
+    if (name == NULL) return NULL;
+    if (!check(p, TOK_PLUS_PLUS) && !check(p, TOK_MINUS_MINUS)) {
+        diag_set(p->diag, cur(p)->line, "expected '++' or '--' but found %s",
+                 token_type_name(cur(p)->type));
+        return NULL;
+    }
+    TokenType op = check(p, TOK_PLUS_PLUS) ? TOK_PLUS : TOK_MINUS;
+    advance_tok(p);
+    if (consume_semi && expect(p, TOK_SEMI, "';' after increment/decrement") == NULL) return NULL;
+    Expr *value = expr_new_binary(op, expr_new_var(name->text, line), expr_new_int(1, line), line);
+    return stmt_new_assign(name->text, value, line);
+}
+
 /* `for (let x in xs) { BODY }` is sugar, desugared here into the equivalent
  * index-based for loop so sema/codegen never need to know it exists:
  *
@@ -621,7 +659,9 @@ static Stmt *parse_for(Parser *p) {
     Expr *cond = parse_expr(p);
     if (cond == NULL || p->diag->has_error) return NULL;
     if (expect(p, TOK_SEMI, "';' after for condition") == NULL) return NULL;
-    Stmt *step = parse_assign_stmt(p, 0);
+    Stmt *step = (peek_type(p, 1) == TOK_PLUS_PLUS || peek_type(p, 1) == TOK_MINUS_MINUS)
+                     ? parse_incdec_stmt(p, 0)
+                     : parse_assign_stmt(p, 0);
     if (step == NULL || p->diag->has_error) return NULL;
     if (expect(p, TOK_RPAREN, "')' after for clauses") == NULL) return NULL;
     Stmt *body = parse_block(p);
@@ -669,6 +709,7 @@ static Stmt *parse_statement(Parser *p) {
         case TOK_IDENT: {
             TokenType next = p->tokens->tokens[p->pos + 1].type;
             if (is_assign_token(next)) return parse_assign_stmt(p, 1);
+            if (next == TOK_PLUS_PLUS || next == TOK_MINUS_MINUS) return parse_incdec_stmt(p, 1);
             if (next == TOK_DOT) {
                 /* `a.b.c = v;` -- an arbitrary chain of field reads (each
                  * wrapped as an EXPR_FIELD base) ending in one field to
