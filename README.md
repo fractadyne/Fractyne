@@ -85,14 +85,19 @@ Builds every example that has a matching `.expected` file and diffs its output.
   each desugared to `name = name <op> expr` at parse time
 - Arithmetic `+ - * / %` on `int`/`float`; `+` also concatenates `string`
 - Comparisons `== != < > <= >=`, logical `&& || !`. `==`/`!=` only work on `int`/`float`/
-  `bool`/`string` — a list, map, or struct has no built-in equality; compare its
+  `bool`/`string`/an enum — a list, map, or struct has no built-in equality; compare its
   fields/elements individually instead
+- Bitwise `& | ^ ~ << >>` on `int` only, same precedence as C (`&`/`^`/`|` sit between `&&`
+  and `==`; `<<`/`>>` sit between relational comparisons and `+`/`-`)
 - `cond ? a : b` — ternary; `cond` must be `bool`, and both branches must be the same type
 - `output(expr);`
 - `if (cond) { ... } else if (cond) { ... } else { ... }`
 - `while (cond) { ... }`
 - `for (let i = 0; cond; i = i + 1) { ... }` — C-style; init is `let` or a plain assignment
   (either can use a compound-assign operator), the loop variable is scoped to the loop
+- `for (let x in xs) { ... }` — iterates a list's elements, or a string's characters, one
+  per iteration; pure sugar for the C-style form above (desugared at parse time into it, so
+  `break`/`continue` work the same way)
 - `break;` / `continue;` — only valid inside a `while` or `for` body
 - `fr name(param: type, ...) -> type { ... }` — recursion allowed; omit `-> type` for a
   function that returns nothing
@@ -146,6 +151,9 @@ Maps (keys are always `string`, values must be `int`/`float`/`bool`/`string` —
   present; `m[key] = v;` — insert or overwrite (unlike lists, this doesn't require the key
   to already exist)
 - `len(m)` — number of entries
+- `contains(m, key) -> bool` — true if `key` is actually present (distinguishes a real entry
+  from `m[key]`'s zero-value fallback on a missing key)
+- `keys(m) -> list<string>` — every key, in no particular order
 - Backed by a simple linear-scan association array, not a hash table — fine at small sizes,
   not chosen for lookup performance
 

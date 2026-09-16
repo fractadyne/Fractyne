@@ -210,6 +210,19 @@ static Type check_binary(Sema *sm, Expr *e, Type lt, Type rt) {
                 return TYPE_UNKNOWN;
             }
             return lt;
+        case TOK_AMP:
+        case TOK_PIPE:
+        case TOK_CARET:
+        case TOK_SHL:
+        case TOK_SHR:
+            if (lt != TYPE_INT || rt != TYPE_INT) {
+                diag_set(sm->diag, e->line, "'%s' requires int operands, got %s and %s",
+                         op == TOK_AMP ? "&" : op == TOK_PIPE ? "|" : op == TOK_CARET ? "^" :
+                         op == TOK_SHL ? "<<" : ">>",
+                         type_name(lt), type_name(rt));
+                return TYPE_UNKNOWN;
+            }
+            return TYPE_INT;
         default:
             diag_set(sm->diag, e->line, "internal error: unhandled binary operator");
             return TYPE_UNKNOWN;
@@ -242,6 +255,12 @@ static Type check_expr(Sema *sm, Scope *sc, Expr *e) {
                     return TYPE_UNKNOWN;
                 }
                 e->type = TYPE_BOOL;
+            } else if (e->as.unary.op == TOK_TILDE) {
+                if (operand != TYPE_INT) {
+                    diag_set(sm->diag, e->line, "'~' requires an int operand, got %s", type_name(operand));
+                    return TYPE_UNKNOWN;
+                }
+                e->type = TYPE_INT;
             } else { /* TOK_MINUS */
                 if (!is_numeric(operand)) {
                     diag_set(sm->diag, e->line, "unary '-' requires a numeric operand, got %s",
@@ -467,13 +486,25 @@ static Type check_expr(Sema *sm, Scope *sc, Expr *e) {
             return e->type;
         }
         case EXPR_CONTAINS: {
-            Type list_type = check_expr(sm, sc, e->as.contains.list);
+            Type container_type = check_expr(sm, sc, e->as.contains.list);
             if (sm->diag->has_error) return TYPE_UNKNOWN;
-            if (!type_is_list(list_type)) {
-                diag_set(sm->diag, e->line, "contains() requires a list, got %s", type_name(list_type));
+            if (type_is_map(container_type)) {
+                Type key_type = check_expr(sm, sc, e->as.contains.value);
+                if (sm->diag->has_error) return TYPE_UNKNOWN;
+                if (key_type != TYPE_STRING) {
+                    diag_set(sm->diag, e->line, "contains() key has type %s, expected string",
+                             type_name(key_type));
+                    return TYPE_UNKNOWN;
+                }
+                e->type = TYPE_BOOL;
+                return TYPE_BOOL;
+            }
+            if (!type_is_list(container_type)) {
+                diag_set(sm->diag, e->line, "contains() requires a list or map, got %s",
+                         type_name(container_type));
                 return TYPE_UNKNOWN;
             }
-            if (type_is_list_of_struct(list_type)) {
+            if (type_is_list_of_struct(container_type)) {
                 diag_set(sm->diag, e->line,
                          "cannot check containment in a list of structs; structs have no "
                          "equality -- compare fields individually");
@@ -481,7 +512,7 @@ static Type check_expr(Sema *sm, Scope *sc, Expr *e) {
             }
             Type value_type = check_expr(sm, sc, e->as.contains.value);
             if (sm->diag->has_error) return TYPE_UNKNOWN;
-            Type elem = list_elem(list_type);
+            Type elem = list_elem(container_type);
             if (value_type != elem) {
                 diag_set(sm->diag, e->line, "contains() value has type %s, expected %s",
                          type_name(value_type), type_name(elem));
@@ -489,6 +520,16 @@ static Type check_expr(Sema *sm, Scope *sc, Expr *e) {
             }
             e->type = TYPE_BOOL;
             return TYPE_BOOL;
+        }
+        case EXPR_KEYS: {
+            Type map_type = check_expr(sm, sc, e->as.keys.target);
+            if (sm->diag->has_error) return TYPE_UNKNOWN;
+            if (!type_is_map(map_type)) {
+                diag_set(sm->diag, e->line, "keys() requires a map, got %s", type_name(map_type));
+                return TYPE_UNKNOWN;
+            }
+            e->type = TYPE_LIST_STRING;
+            return TYPE_LIST_STRING;
         }
     }
     return TYPE_UNKNOWN;

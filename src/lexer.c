@@ -60,7 +60,7 @@ static const Keyword KEYWORDS[] = {
     {"len", TOK_LEN},       {"break", TOK_BREAK},   {"continue", TOK_CONTINUE},
     {"struct", TOK_STRUCT}, {"involve", TOK_INVOLVE}, {"enum", TOK_ENUM},
     {"sort", TOK_SORT},     {"reverse", TOK_REVERSE}, {"contains", TOK_CONTAINS},
-    {"remove", TOK_REMOVE},
+    {"remove", TOK_REMOVE}, {"keys", TOK_KEYS}, {"in", TOK_IN},
     {"true", TOK_TRUE},     {"false", TOK_FALSE},
     {"int", TOK_TYPE_INT},  {"float", TOK_TYPE_FLOAT},
     {"bool", TOK_TYPE_BOOL}, {"string", TOK_TYPE_STRING}, {"list", TOK_TYPE_LIST},
@@ -231,22 +231,28 @@ int lex(const char *source, TokenList *out, Diag *diag) {
                 break;
             case '<':
                 if (match(&lx, '=')) push_token(&lx, TOK_LE, NULL, 0, 0, 0, line);
+                else if (match(&lx, '<')) push_token(&lx, TOK_SHL, NULL, 0, 0, 0, line);
                 else push_token(&lx, TOK_LT, NULL, 0, 0, 0, line);
                 break;
             case '>':
                 if (match(&lx, '=')) push_token(&lx, TOK_GE, NULL, 0, 0, 0, line);
+                else if (match(&lx, '>')) push_token(&lx, TOK_SHR, NULL, 0, 0, 0, line);
                 else push_token(&lx, TOK_GT, NULL, 0, 0, 0, line);
                 break;
             case '&':
                 if (match(&lx, '&')) { push_token(&lx, TOK_AND, NULL, 0, 0, 0, line); break; }
-                diag_set(diag, line, "unexpected character '&' (did you mean '&&'?)");
-                free(lx.tokens);
-                return 0;
+                push_token(&lx, TOK_AMP, NULL, 0, 0, 0, line);
+                break;
             case '|':
                 if (match(&lx, '|')) { push_token(&lx, TOK_OR, NULL, 0, 0, 0, line); break; }
-                diag_set(diag, line, "unexpected character '|' (did you mean '||'?)");
-                free(lx.tokens);
-                return 0;
+                push_token(&lx, TOK_PIPE, NULL, 0, 0, 0, line);
+                break;
+            case '^':
+                push_token(&lx, TOK_CARET, NULL, 0, 0, 0, line);
+                break;
+            case '~':
+                push_token(&lx, TOK_TILDE, NULL, 0, 0, 0, line);
+                break;
             case '(': push_token(&lx, TOK_LPAREN, NULL, 0, 0, 0, line); break;
             case ')': push_token(&lx, TOK_RPAREN, NULL, 0, 0, 0, line); break;
             case '{': push_token(&lx, TOK_LBRACE, NULL, 0, 0, 0, line); break;
@@ -297,6 +303,8 @@ const char *token_type_name(TokenType t) {
         case TOK_REVERSE: return "'reverse'";
         case TOK_CONTAINS: return "'contains'";
         case TOK_REMOVE: return "'remove'";
+        case TOK_KEYS: return "'keys'";
+        case TOK_IN: return "'in'";
         case TOK_LEN: return "'len'";
         case TOK_FOR: return "'for'";
         case TOK_BREAK: return "'break'";
@@ -327,6 +335,12 @@ const char *token_type_name(TokenType t) {
         case TOK_GE: return "'>='";
         case TOK_AND: return "'&&'";
         case TOK_OR: return "'||'";
+        case TOK_AMP: return "'&'";
+        case TOK_PIPE: return "'|'";
+        case TOK_CARET: return "'^'";
+        case TOK_TILDE: return "'~'";
+        case TOK_SHL: return "'<<'";
+        case TOK_SHR: return "'>>'";
         case TOK_LPAREN: return "'('";
         case TOK_RPAREN: return "')'";
         case TOK_LBRACE: return "'{'";

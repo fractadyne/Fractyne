@@ -59,7 +59,7 @@ typedef struct {
 typedef enum {
     EXPR_INT, EXPR_FLOAT, EXPR_BOOL, EXPR_STRING, EXPR_VAR,
     EXPR_UNARY, EXPR_BINARY, EXPR_CALL, EXPR_LIST, EXPR_INDEX, EXPR_LEN, EXPR_MAP,
-    EXPR_STRUCT_LIT, EXPR_FIELD, EXPR_TERNARY, EXPR_CONTAINS, EXPR_ENUM_MEMBER
+    EXPR_STRUCT_LIT, EXPR_FIELD, EXPR_TERNARY, EXPR_CONTAINS, EXPR_ENUM_MEMBER, EXPR_KEYS
 } ExprKind;
 
 typedef struct Expr {
@@ -83,6 +83,7 @@ typedef struct Expr {
         struct { struct Expr *cond; struct Expr *then_val; struct Expr *else_val; } ternary;
         struct { struct Expr *list; struct Expr *value; } contains;
         struct { char *enum_name; char *member_name; } enum_member;
+        struct { struct Expr *target; } keys;
     } as;
 } Expr;
 
@@ -165,6 +166,7 @@ Expr *expr_new_field(Expr *base, const char *field, int line);
 Expr *expr_new_ternary(Expr *cond, Expr *then_val, Expr *else_val, int line);
 Expr *expr_new_contains(Expr *list, Expr *value, int line);
 Expr *expr_new_enum_member(const char *enum_name, const char *member_name, int line);
+Expr *expr_new_keys(Expr *target, int line);
 void expr_free(Expr *e);
 
 /* Stmt constructors */

@@ -269,6 +269,29 @@ static void emit_map_runtime(FILE *out) {
             k->tag, k->struct_name, k->value_ctype,
             k->tag, k->struct_name, k->value_ctype,
             k->entry_name);
+
+        fprintf(out,
+            "static int fy_map_%s_has(%s m, const char *key) __attribute__((unused));\n"
+            "static int fy_map_%s_has(%s m, const char *key) {\n"
+            "    for (long i = 0; i < m.len; i++) {\n"
+            "        if (strcmp(m.entries[i].key, key) == 0) return 1;\n"
+            "    }\n"
+            "    return 0;\n"
+            "}\n\n",
+            k->tag, k->struct_name,
+            k->tag, k->struct_name);
+
+        fprintf(out,
+            "static FyListString fy_map_%s_keys(%s m) __attribute__((unused));\n"
+            "static FyListString fy_map_%s_keys(%s m) {\n"
+            "    long cap = m.len > 0 ? m.len : 1;\n"
+            "    const char **data = malloc((size_t)cap * sizeof(const char *));\n"
+            "    for (long i = 0; i < m.len; i++) data[i] = m.entries[i].key;\n"
+            "    FyListString l; l.data = data; l.len = m.len; l.cap = cap;\n"
+            "    return l;\n"
+            "}\n\n",
+            k->tag, k->struct_name,
+            k->tag, k->struct_name);
     }
 }
 
@@ -866,6 +889,11 @@ static const char *binop_text(TokenType op) {
         case TOK_GE: return ">=";
         case TOK_AND: return "&&";
         case TOK_OR: return "||";
+        case TOK_AMP: return "&";
+        case TOK_PIPE: return "|";
+        case TOK_CARET: return "^";
+        case TOK_SHL: return "<<";
+        case TOK_SHR: return ">>";
         default: return "?";
     }
 }
@@ -888,7 +916,8 @@ static void emit_expr(FILE *out, Expr *e) {
             fprintf(out, "%s", e->as.string_val);
             return;
         case EXPR_UNARY:
-            fprintf(out, "(%s", e->as.unary.op == TOK_BANG ? "!" : "-");
+            fprintf(out, "(%s", e->as.unary.op == TOK_BANG ? "!" :
+                                 e->as.unary.op == TOK_TILDE ? "~" : "-");
             emit_expr(out, e->as.unary.operand);
             fprintf(out, ")");
             return;
@@ -1022,8 +1051,14 @@ static void emit_expr(FILE *out, Expr *e) {
             fprintf(out, ")");
             return;
         case EXPR_CONTAINS: {
-            const ListKind *k = list_kind_for(e->as.contains.list->type);
-            fprintf(out, "fy_list_%s_contains(", k->tag);
+            Type container_type = e->as.contains.list->type;
+            if (type_is_map(container_type)) {
+                const MapKind *k = map_kind_for(container_type);
+                fprintf(out, "fy_map_%s_has(", k->tag);
+            } else {
+                const ListKind *k = list_kind_for(container_type);
+                fprintf(out, "fy_list_%s_contains(", k->tag);
+            }
             emit_expr(out, e->as.contains.list);
             fprintf(out, ", ");
             emit_expr(out, e->as.contains.value);
@@ -1033,6 +1068,13 @@ static void emit_expr(FILE *out, Expr *e) {
         case EXPR_ENUM_MEMBER:
             fprintf(out, "%s_%s", e->as.enum_member.enum_name, e->as.enum_member.member_name);
             return;
+        case EXPR_KEYS: {
+            const MapKind *k = map_kind_for(e->as.keys.target->type);
+            fprintf(out, "fy_map_%s_keys(", k->tag);
+            emit_expr(out, e->as.keys.target);
+            fprintf(out, ")");
+            return;
+        }
     }
 }
 

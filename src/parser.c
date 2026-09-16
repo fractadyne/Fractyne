@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -47,6 +48,16 @@ static int is_enum_name(Parser *p, const char *name) {
 static Token *cur(Parser *p) { return &p->tokens->tokens[p->pos]; }
 static Token *previous(Parser *p) { return &p->tokens->tokens[p->pos - 1]; }
 static int check(Parser *p, TokenType t) { return cur(p)->type == t; }
+
+/* Peeks `offset` tokens ahead of pos, clamped to the trailing TOK_EOF rather
+ * than reading past the end of the array -- offset 1 is always safe since
+ * TOK_EOF is a guaranteed sentinel, but offset 2+ (used by foreach-loop
+ * lookahead) isn't, on input that ends right at the tokens being peeked past. */
+static TokenType peek_type(Parser *p, int offset) {
+    int i = p->pos + offset;
+    if (i >= p->tokens->count) i = p->tokens->count - 1;
+    return p->tokens->tokens[i].type;
+}
 
 static Token *advance_tok(Parser *p) {
     if (!check(p, TOK_EOF)) p->pos++;
@@ -171,6 +182,14 @@ static Expr *parse_primary(Parser *p) {
             if (expect(p, TOK_RPAREN, "')' after len argument") == NULL) return NULL;
             return expr_new_len(target, t->line);
         }
+        case TOK_KEYS: {
+            advance_tok(p);
+            if (expect(p, TOK_LPAREN, "'(' after keys") == NULL) return NULL;
+            Expr *target = parse_expr(p);
+            if (target == NULL || p->diag->has_error) return NULL;
+            if (expect(p, TOK_RPAREN, "')' after keys argument") == NULL) return NULL;
+            return expr_new_keys(target, t->line);
+        }
         case TOK_CONTAINS: {
             advance_tok(p);
             if (expect(p, TOK_LPAREN, "'(' after contains") == NULL) return NULL;
@@ -232,7 +251,7 @@ static Expr *parse_postfix(Parser *p) {
 }
 
 static Expr *parse_unary(Parser *p) {
-    if (check(p, TOK_BANG) || check(p, TOK_MINUS)) {
+    if (check(p, TOK_BANG) || check(p, TOK_MINUS) || check(p, TOK_TILDE)) {
         Token *op = advance_tok(p);
         Expr *operand = parse_unary(p);
         if (operand == NULL || p->diag->has_error) return NULL;
@@ -265,12 +284,26 @@ static Expr *parse_term(Parser *p) {
     return left;
 }
 
-static Expr *parse_comparison(Parser *p) {
+/* Shift sits between relational and additive, same as C: `a < b << c` groups
+ * as `a < (b << c)`, `b << c + d` groups as `b << (c + d)`. */
+static Expr *parse_shift(Parser *p) {
     Expr *left = parse_term(p);
+    if (left == NULL || p->diag->has_error) return NULL;
+    while (check(p, TOK_SHL) || check(p, TOK_SHR)) {
+        Token *op = advance_tok(p);
+        Expr *right = parse_term(p);
+        if (right == NULL || p->diag->has_error) return NULL;
+        left = expr_new_binary(op->type, left, right, op->line);
+    }
+    return left;
+}
+
+static Expr *parse_comparison(Parser *p) {
+    Expr *left = parse_shift(p);
     if (left == NULL || p->diag->has_error) return NULL;
     while (check(p, TOK_LT) || check(p, TOK_LE) || check(p, TOK_GT) || check(p, TOK_GE)) {
         Token *op = advance_tok(p);
-        Expr *right = parse_term(p);
+        Expr *right = parse_shift(p);
         if (right == NULL || p->diag->has_error) return NULL;
         left = expr_new_binary(op->type, left, right, op->line);
     }
@@ -289,12 +322,51 @@ static Expr *parse_equality(Parser *p) {
     return left;
 }
 
-static Expr *parse_and(Parser *p) {
+/* Bitwise `&`/`^`/`|` sit between equality and logical `&&`, same as C, each
+ * its own precedence level so `a & b | c ^ d` groups the way C programmers
+ * expect without parens: `(a & b) | (c ^ d)`. */
+static Expr *parse_bitand(Parser *p) {
     Expr *left = parse_equality(p);
+    if (left == NULL || p->diag->has_error) return NULL;
+    while (check(p, TOK_AMP)) {
+        Token *op = advance_tok(p);
+        Expr *right = parse_equality(p);
+        if (right == NULL || p->diag->has_error) return NULL;
+        left = expr_new_binary(op->type, left, right, op->line);
+    }
+    return left;
+}
+
+static Expr *parse_bitxor(Parser *p) {
+    Expr *left = parse_bitand(p);
+    if (left == NULL || p->diag->has_error) return NULL;
+    while (check(p, TOK_CARET)) {
+        Token *op = advance_tok(p);
+        Expr *right = parse_bitand(p);
+        if (right == NULL || p->diag->has_error) return NULL;
+        left = expr_new_binary(op->type, left, right, op->line);
+    }
+    return left;
+}
+
+static Expr *parse_bitor(Parser *p) {
+    Expr *left = parse_bitxor(p);
+    if (left == NULL || p->diag->has_error) return NULL;
+    while (check(p, TOK_PIPE)) {
+        Token *op = advance_tok(p);
+        Expr *right = parse_bitxor(p);
+        if (right == NULL || p->diag->has_error) return NULL;
+        left = expr_new_binary(op->type, left, right, op->line);
+    }
+    return left;
+}
+
+static Expr *parse_and(Parser *p) {
+    Expr *left = parse_bitor(p);
     if (left == NULL || p->diag->has_error) return NULL;
     while (check(p, TOK_AND)) {
         Token *op = advance_tok(p);
-        Expr *right = parse_equality(p);
+        Expr *right = parse_bitor(p);
         if (right == NULL || p->diag->has_error) return NULL;
         left = expr_new_binary(op->type, left, right, op->line);
     }
@@ -478,10 +550,72 @@ static Stmt *parse_assign_stmt(Parser *p, int consume_semi) {
     return stmt_new_assign(name->text, value, line);
 }
 
+/* `for (let x in xs) { BODY }` is sugar, desugared here into the equivalent
+ * index-based for loop so sema/codegen never need to know it exists:
+ *
+ *   {
+ *       let __fy_feN_src = xs;
+ *       for (let __fy_feN_idx = 0; __fy_feN_idx < len(__fy_feN_src); __fy_feN_idx = __fy_feN_idx + 1) {
+ *           let x = __fy_feN_src[__fy_feN_idx];
+ *           BODY
+ *       }
+ *   }
+ *
+ * A per-parse counter keeps the synthetic names unique across nested/sibling
+ * for-in loops in the same file. Works on anything len()/[i] already work
+ * on -- any list, or a string (iterating its characters). */
+static int g_foreach_id = 0;
+
+static Stmt *parse_foreach(Parser *p, int line) {
+    advance_tok(p); /* 'let' */
+    Token *name = expect(p, TOK_IDENT, "a loop variable name");
+    if (name == NULL) return NULL;
+    advance_tok(p); /* 'in' */
+    Expr *source = parse_expr(p);
+    if (source == NULL || p->diag->has_error) return NULL;
+    if (expect(p, TOK_RPAREN, "')' after for-in source") == NULL) return NULL;
+    Stmt *body = parse_block(p);
+    if (body == NULL || p->diag->has_error) return NULL;
+
+    char src_name[32], idx_name[32];
+    snprintf(src_name, sizeof(src_name), "__fy_fe%d_src", g_foreach_id);
+    snprintf(idx_name, sizeof(idx_name), "__fy_fe%d_idx", g_foreach_id);
+    g_foreach_id++;
+
+    Stmt *src_let = stmt_new_let(src_name, source, line);
+
+    Expr *cond = expr_new_binary(TOK_LT, expr_new_var(idx_name, line),
+                                  expr_new_len(expr_new_var(src_name, line), line), line);
+    Expr *step_rhs = expr_new_binary(TOK_PLUS, expr_new_var(idx_name, line),
+                                      expr_new_int(1, line), line);
+    Stmt *step = stmt_new_assign(idx_name, step_rhs, line);
+    Stmt *idx_let = stmt_new_let(idx_name, expr_new_int(0, line), line);
+
+    Expr *elem_expr = expr_new_index(expr_new_var(src_name, line), expr_new_var(idx_name, line), line);
+    Stmt *elem_let = stmt_new_let(name->text, elem_expr, line);
+
+    Stmt **stmts = malloc((size_t)(body->as.block.count + 1) * sizeof(Stmt *));
+    stmts[0] = elem_let;
+    for (int i = 0; i < body->as.block.count; i++) stmts[i + 1] = body->as.block.stmts[i];
+    free(body->as.block.stmts);
+    body->as.block.stmts = stmts;
+    body->as.block.count++;
+
+    Stmt *for_stmt = stmt_new_for(idx_let, cond, step, body, line);
+
+    Stmt **outer = malloc(2 * sizeof(Stmt *));
+    outer[0] = src_let;
+    outer[1] = for_stmt;
+    return stmt_new_block(outer, 2, line);
+}
+
 static Stmt *parse_for(Parser *p) {
     int line = cur(p)->line;
     advance_tok(p); /* 'for' */
     if (expect(p, TOK_LPAREN, "'(' after for") == NULL) return NULL;
+    if (check(p, TOK_LET) && peek_type(p, 1) == TOK_IDENT && peek_type(p, 2) == TOK_IN) {
+        return parse_foreach(p, line);
+    }
     Stmt *init = check(p, TOK_LET) ? parse_let(p) : parse_assign_stmt(p, 1);
     if (init == NULL || p->diag->has_error) return NULL;
     Expr *cond = parse_expr(p);

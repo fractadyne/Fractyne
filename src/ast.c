@@ -273,6 +273,12 @@ Expr *expr_new_enum_member(const char *enum_name, const char *member_name, int l
     return e;
 }
 
+Expr *expr_new_keys(Expr *target, int line) {
+    Expr *e = expr_new(EXPR_KEYS, line);
+    e->as.keys.target = target;
+    return e;
+}
+
 void expr_free(Expr *e) {
     if (e == NULL) return;
     switch (e->kind) {
@@ -340,6 +346,9 @@ void expr_free(Expr *e) {
         case EXPR_ENUM_MEMBER:
             free(e->as.enum_member.enum_name);
             free(e->as.enum_member.member_name);
+            break;
+        case EXPR_KEYS:
+            expr_free(e->as.keys.target);
             break;
     }
     free(e);
