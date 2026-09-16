@@ -225,6 +225,13 @@ Type conversion builtins (ordinary function-call syntax, resolved before user fu
 `int_to_string`, `float_to_string`, `bool_to_string`, `string_to_int`, `string_to_float`,
 `int_to_float`, `float_to_int`.
 
+`compose("template with {} placeholders", value, ...) -> string` — builds a string by
+substituting each `{}` in order with `value`'s own representation (same rendering `output`
+uses for each type: `int`/`float`/`bool`/`string`/an enum's member name — a list, map, or
+struct doesn't fit a placeholder). The template must be a string literal, not just any
+`string` expression, so the number of `{}` placeholders can be checked against the number of
+arguments at compile time rather than at runtime.
+
 Shape builtins — print ASCII art to stdout, no window or SDL2 needed:
 `draw_square(n)`, `draw_rect(w, h)`, `draw_triangle(n)`. (For an actual window with actual
 shapes, see "Windows and graphics" below.)

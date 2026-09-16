@@ -287,6 +287,14 @@ Expr *expr_new_slice(Expr *base, Expr *start, Expr *end, int line) {
     return e;
 }
 
+Expr *expr_new_compose(const char *template_text, Expr **args, int arg_count, int line) {
+    Expr *e = expr_new(EXPR_COMPOSE, line);
+    e->as.compose.template_text = dup_str(template_text);
+    e->as.compose.args = args;
+    e->as.compose.arg_count = arg_count;
+    return e;
+}
+
 void expr_free(Expr *e) {
     if (e == NULL) return;
     switch (e->kind) {
@@ -362,6 +370,11 @@ void expr_free(Expr *e) {
             expr_free(e->as.slice.base);
             expr_free(e->as.slice.start);
             expr_free(e->as.slice.end);
+            break;
+        case EXPR_COMPOSE:
+            free(e->as.compose.template_text);
+            for (int i = 0; i < e->as.compose.arg_count; i++) expr_free(e->as.compose.args[i]);
+            free(e->as.compose.args);
             break;
     }
     free(e);

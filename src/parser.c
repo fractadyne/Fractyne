@@ -182,6 +182,25 @@ static Expr *parse_primary(Parser *p) {
             if (expect(p, TOK_RPAREN, "')' after len argument") == NULL) return NULL;
             return expr_new_len(target, t->line);
         }
+        case TOK_COMPOSE: {
+            /* compose("text {} more {}", a, b) -- the template must be a
+             * literal (not just any string expression) so the '{}' count can
+             * be checked against the argument count at compile time, the
+             * same reasoning global `let`/`fixed` initializers stay literal. */
+            advance_tok(p);
+            if (expect(p, TOK_LPAREN, "'(' after compose") == NULL) return NULL;
+            Token *tmpl = expect(p, TOK_STRING_LIT, "a string literal template");
+            if (tmpl == NULL) return NULL;
+            PtrList args;
+            ptrlist_init(&args);
+            while (match_tok(p, TOK_COMMA)) {
+                Expr *arg = parse_expr(p);
+                if (arg == NULL || p->diag->has_error) return NULL;
+                ptrlist_push(&args, arg);
+            }
+            if (expect(p, TOK_RPAREN, "')' after compose arguments") == NULL) return NULL;
+            return expr_new_compose(tmpl->text, (Expr **)args.items, args.count, t->line);
+        }
         case TOK_KEYS: {
             advance_tok(p);
             if (expect(p, TOK_LPAREN, "'(' after keys") == NULL) return NULL;

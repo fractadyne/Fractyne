@@ -580,6 +580,31 @@ static Type check_expr(Sema *sm, Scope *sc, Expr *e) {
             e->type = base_type;
             return base_type;
         }
+        case EXPR_COMPOSE: {
+            int placeholders = 0;
+            for (const char *c = e->as.compose.template_text; *c != '\0'; c++) {
+                if (c[0] == '{' && c[1] == '}') { placeholders++; c++; }
+            }
+            if (placeholders != e->as.compose.arg_count) {
+                diag_set(sm->diag, e->line,
+                         "compose() template has %d placeholder%s, got %d argument%s",
+                         placeholders, placeholders == 1 ? "" : "s",
+                         e->as.compose.arg_count, e->as.compose.arg_count == 1 ? "" : "s");
+                return TYPE_UNKNOWN;
+            }
+            for (int i = 0; i < e->as.compose.arg_count; i++) {
+                Type t = check_expr(sm, sc, e->as.compose.args[i]);
+                if (sm->diag->has_error) return TYPE_UNKNOWN;
+                if (type_is_list(t) || type_is_map(t) || type_is_struct(t) || t == TYPE_VOID) {
+                    diag_set(sm->diag, e->as.compose.args[i]->line,
+                             "cannot compose a %s; only int/float/bool/string/enum values fit "
+                             "a '{}' placeholder", type_name(t));
+                    return TYPE_UNKNOWN;
+                }
+            }
+            e->type = TYPE_STRING;
+            return TYPE_STRING;
+        }
     }
     return TYPE_UNKNOWN;
 }

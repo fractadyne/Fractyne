@@ -936,6 +936,49 @@ static const char *binop_text(TokenType op) {
     }
 }
 
+static void emit_expr(FILE *out, Expr *e);
+
+/* Emits one compose() argument stringified to a `const char *` -- a plain
+ * string passes through as-is, everything else (already restricted by sema
+ * to int/float/bool/enum) goes through the same conversion output() uses. */
+static void emit_compose_value(FILE *out, Expr *value) {
+    if (value->type == TYPE_STRING) {
+        emit_expr(out, value);
+        return;
+    }
+    if (type_is_enum(value->type)) {
+        const EnumDecl *ed = enum_decl_for(value->type);
+        fprintf(out, "fy_enum_names_%s[(int)(", ed->name);
+        emit_expr(out, value);
+        fprintf(out, ")]");
+        return;
+    }
+    switch (value->type) {
+        case TYPE_INT: fprintf(out, "fy_int_to_string("); break;
+        case TYPE_FLOAT: fprintf(out, "fy_float_to_string("); break;
+        case TYPE_BOOL: fprintf(out, "fy_bool_to_string("); break;
+        default: fprintf(out, "(const char *)("); break; /* unreachable, sema already rejected this */
+    }
+    emit_expr(out, value);
+    fprintf(out, ")");
+}
+
+/* Builds the "((seg0 <> val0) <> seg1) <> val1 ... <> segN" concatenation
+ * left-associatively via nested fy_concat calls, recursing on the
+ * accumulated prefix so the text nests correctly (upto is the last segment
+ * index included so far; segs/lens hold arg_count+1 template pieces). */
+static void emit_compose_chain(FILE *out, const char **segs, const int *lens, Expr **args, int upto) {
+    if (upto == 0) {
+        fprintf(out, "\"%.*s\"", lens[0], segs[0]);
+        return;
+    }
+    fprintf(out, "fy_concat(fy_concat(");
+    emit_compose_chain(out, segs, lens, args, upto - 1);
+    fprintf(out, ", ");
+    emit_compose_value(out, args[upto - 1]);
+    fprintf(out, "), \"%.*s\")", lens[upto], segs[upto]);
+}
+
 static void emit_expr(FILE *out, Expr *e) {
     switch (e->kind) {
         case EXPR_INT:
@@ -1128,6 +1171,34 @@ static void emit_expr(FILE *out, Expr *e) {
             fprintf(out, ", ");
             emit_expr(out, e->as.slice.end);
             fprintf(out, ")");
+            return;
+        }
+        case EXPR_COMPOSE: {
+            const char *tmpl = e->as.compose.template_text;
+            int n = e->as.compose.arg_count;
+            const char **seg_ptrs = malloc((size_t)(n + 1) * sizeof(char *));
+            int *seg_lens = malloc((size_t)(n + 1) * sizeof(int));
+            const char *p = tmpl;
+            const char *seg_start = tmpl;
+            int seg_i = 0;
+            while (*p != '\0') {
+                if (p[0] == '{' && p[1] == '}') {
+                    seg_ptrs[seg_i] = seg_start;
+                    seg_lens[seg_i] = (int)(p - seg_start);
+                    seg_i++;
+                    p += 2;
+                    seg_start = p;
+                } else {
+                    p++;
+                }
+            }
+            seg_ptrs[seg_i] = seg_start;
+            seg_lens[seg_i] = (int)(p - seg_start);
+
+            emit_compose_chain(out, seg_ptrs, seg_lens, e->as.compose.args, n);
+
+            free(seg_ptrs);
+            free(seg_lens);
             return;
         }
     }

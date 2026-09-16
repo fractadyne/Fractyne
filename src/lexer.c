@@ -61,7 +61,7 @@ static const Keyword KEYWORDS[] = {
     {"struct", TOK_STRUCT}, {"involve", TOK_INVOLVE}, {"enum", TOK_ENUM},
     {"sort", TOK_SORT},     {"reverse", TOK_REVERSE}, {"contains", TOK_CONTAINS},
     {"remove", TOK_REMOVE}, {"keys", TOK_KEYS}, {"in", TOK_IN},
-    {"branch", TOK_BRANCH}, {"case", TOK_CASE},
+    {"branch", TOK_BRANCH}, {"case", TOK_CASE}, {"compose", TOK_COMPOSE},
     {"true", TOK_TRUE},     {"false", TOK_FALSE},
     {"int", TOK_TYPE_INT},  {"float", TOK_TYPE_FLOAT},
     {"bool", TOK_TYPE_BOOL}, {"string", TOK_TYPE_STRING}, {"list", TOK_TYPE_LIST},
@@ -318,6 +318,7 @@ const char *token_type_name(TokenType t) {
         case TOK_IN: return "'in'";
         case TOK_BRANCH: return "'branch'";
         case TOK_CASE: return "'case'";
+        case TOK_COMPOSE: return "'compose'";
         case TOK_LEN: return "'len'";
         case TOK_FOR: return "'for'";
         case TOK_BREAK: return "'break'";
