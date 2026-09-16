@@ -99,6 +99,14 @@ Builds every example that has a matching `.expected` file and diffs its output.
 - `cond ? a : b` — ternary; `cond` must be `bool`, and both branches must be the same type
 - `output(expr);`
 - `if (cond) { ... } else if (cond) { ... } else { ... }`
+- `branch (expr) { case v1, v2 { ... } case v3 { ... } else { ... } }` — compares `expr`
+  against each case's value(s) with `==` in order, running the first block that matches (a
+  comma-separated case matches on any of its values); `else` is optional and runs if nothing
+  matched. Pure sugar for an if/else-if/else chain (desugared at parse time into one), so the
+  same `==` rules apply — case values must match `expr`'s type, and branching on a list, map,
+  or struct is rejected the same way comparing them with `==` already is. No fallthrough
+  between cases. Not a loop: `break`/`continue` inside a case body only affect an actual
+  enclosing loop, not the branch itself
 - `while (cond) { ... }`
 - `for (let i = 0; cond; i = i + 1) { ... }` — C-style; init is `let` or a plain assignment
   (either can use a compound-assign operator), the loop variable is scoped to the loop

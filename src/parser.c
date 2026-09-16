@@ -658,6 +658,89 @@ static Stmt *parse_foreach(Parser *p, int line) {
     return stmt_new_block(outer, 2, line);
 }
 
+/* `branch (expr) { case v1, v2 { A } case v3 { B } else { C } }` is sugar,
+ * desugared here into a chain of ordinary if/else-if/else statements
+ * comparing a saved copy of expr against each case's value(s) with `==`:
+ *
+ *   {
+ *       let __fy_brN_val = expr;
+ *       if (__fy_brN_val == v1 || __fy_brN_val == v2) { A }
+ *       else if (__fy_brN_val == v3) { B }
+ *       else { C }
+ *   }
+ *
+ * Reuses check_binary's existing `==` rules entirely, so a case value's type
+ * must match expr's, and branching on a list/map/struct is rejected the
+ * same way comparing them with `==` already is. No fallthrough between
+ * cases (each is its own self-contained if arm) -- `break`/`continue`
+ * inside a case body only affect an actual enclosing loop, same as
+ * anywhere else, not "the branch" (branch isn't a loop). `else` is
+ * optional; at least one `case` is required. */
+static int g_branch_id = 0;
+
+static Stmt *parse_branch(Parser *p) {
+    int line = cur(p)->line;
+    advance_tok(p); /* 'branch' */
+    if (expect(p, TOK_LPAREN, "'(' after branch") == NULL) return NULL;
+    Expr *subject = parse_expr(p);
+    if (subject == NULL || p->diag->has_error) return NULL;
+    if (expect(p, TOK_RPAREN, "')' after branch subject") == NULL) return NULL;
+    if (expect(p, TOK_LBRACE, "'{' to start a branch body") == NULL) return NULL;
+
+    char val_name[32];
+    snprintf(val_name, sizeof(val_name), "__fy_br%d_val", g_branch_id++);
+    Stmt *val_let = stmt_new_let(val_name, subject, line);
+
+    Stmt *chain_head = NULL;
+    Stmt *chain_tail = NULL;
+    int case_count = 0;
+
+    while (check(p, TOK_CASE)) {
+        int case_line = cur(p)->line;
+        advance_tok(p); /* 'case' */
+        PtrList case_vals;
+        ptrlist_init(&case_vals);
+        do {
+            Expr *cv = parse_expr(p);
+            if (cv == NULL || p->diag->has_error) return NULL;
+            ptrlist_push(&case_vals, cv);
+        } while (match_tok(p, TOK_COMMA));
+        Stmt *body = parse_block(p);
+        if (body == NULL || p->diag->has_error) return NULL;
+
+        Expr *cond = NULL;
+        for (int i = 0; i < case_vals.count; i++) {
+            Expr *eq = expr_new_binary(TOK_EQ, expr_new_var(val_name, case_line),
+                                        (Expr *)case_vals.items[i], case_line);
+            cond = (cond == NULL) ? eq : expr_new_binary(TOK_OR, cond, eq, case_line);
+        }
+        free(case_vals.items);
+
+        Stmt *if_stmt = stmt_new_if(cond, body, NULL, case_line);
+        if (chain_head == NULL) chain_head = if_stmt;
+        else chain_tail->as.if_stmt.else_branch = if_stmt;
+        chain_tail = if_stmt;
+        case_count++;
+    }
+    if (case_count == 0) {
+        diag_set(p->diag, cur(p)->line, "expected at least one 'case' in branch but found %s",
+                 token_type_name(cur(p)->type));
+        return NULL;
+    }
+    if (check(p, TOK_ELSE)) {
+        advance_tok(p);
+        Stmt *else_body = parse_block(p);
+        if (else_body == NULL || p->diag->has_error) return NULL;
+        chain_tail->as.if_stmt.else_branch = else_body;
+    }
+    if (expect(p, TOK_RBRACE, "'}' after branch") == NULL) return NULL;
+
+    Stmt **outer = malloc(2 * sizeof(Stmt *));
+    outer[0] = val_let;
+    outer[1] = chain_head;
+    return stmt_new_block(outer, 2, line);
+}
+
 static Stmt *parse_for(Parser *p) {
     int line = cur(p)->line;
     advance_tok(p); /* 'for' */
@@ -705,6 +788,7 @@ static Stmt *parse_statement(Parser *p) {
         case TOK_IF: return parse_if(p);
         case TOK_WHILE: return parse_while(p);
         case TOK_FOR: return parse_for(p);
+        case TOK_BRANCH: return parse_branch(p);
         case TOK_BREAK: {
             int line = cur(p)->line;
             advance_tok(p);
