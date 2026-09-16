@@ -232,12 +232,24 @@ static Expr *parse_postfix(Parser *p) {
     if (base == NULL || p->diag->has_error) return NULL;
     for (;;) {
         if (check(p, TOK_LBRACKET)) {
+            /* `xs[a:b]` slices (both bounds required -- no `xs[:3]`/`xs[2:]`
+             * shorthand, since a default end of "len(xs)" would need to
+             * reference the base expression a second time, and Fractyne's
+             * AST has no way to duplicate an arbitrary subtree safely; write
+             * `xs[2:len(xs)]` instead). Otherwise a plain `xs[i]` index. */
             int line = cur(p)->line;
             advance_tok(p); /* '[' */
             Expr *idx = parse_expr(p);
             if (idx == NULL || p->diag->has_error) return NULL;
-            if (expect(p, TOK_RBRACKET, "']' after index") == NULL) return NULL;
-            base = expr_new_index(base, idx, line);
+            if (match_tok(p, TOK_COLON)) {
+                Expr *end = parse_expr(p);
+                if (end == NULL || p->diag->has_error) return NULL;
+                if (expect(p, TOK_RBRACKET, "']' after slice") == NULL) return NULL;
+                base = expr_new_slice(base, idx, end, line);
+            } else {
+                if (expect(p, TOK_RBRACKET, "']' after index") == NULL) return NULL;
+                base = expr_new_index(base, idx, line);
+            }
         } else if (check(p, TOK_DOT)) {
             int line = cur(p)->line;
             advance_tok(p); /* '.' */

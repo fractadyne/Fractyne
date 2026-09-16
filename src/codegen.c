@@ -168,6 +168,25 @@ static void emit_list_runtime(FILE *out) {
             k->tag, k->struct_name,
             k->tag, k->struct_name);
 
+        fprintf(out,
+            "static %s fy_list_%s_slice(%s l, long start, long end) __attribute__((unused));\n"
+            "static %s fy_list_%s_slice(%s l, long start, long end) {\n"
+            "    if (start < 0) start = 0;\n"
+            "    if (start > l.len) start = l.len;\n"
+            "    if (end < start) end = start;\n"
+            "    if (end > l.len) end = l.len;\n"
+            "    long n = end - start;\n"
+            "    long cap = n > 0 ? n : 1;\n"
+            "    %s *data = malloc((size_t)cap * sizeof(%s));\n"
+            "    memcpy(data, l.data + start, (size_t)n * sizeof(%s));\n"
+            "    %s r; r.data = data; r.len = n; r.cap = cap;\n"
+            "    return r;\n"
+            "}\n\n",
+            k->struct_name, k->tag, k->struct_name,
+            k->struct_name, k->tag, k->struct_name,
+            k->elem_ctype, k->elem_ctype, k->elem_ctype,
+            k->struct_name);
+
         if (k->type == TYPE_LIST_STRING) {
             fprintf(out,
                 "static int fy_list_%s_cmp(const void *a, const void *b) __attribute__((unused));\n"
@@ -379,6 +398,25 @@ static void emit_struct_list_wrapper(FILE *out, const StructDecl *sd) {
         "    l->len--;\n"
         "}\n\n",
         sd->name, sd->name, sd->name, sd->name);
+
+    fprintf(out,
+        "static FyListStruct_%s fy_list_struct_%s_slice(FyListStruct_%s l, long start, long end) __attribute__((unused));\n"
+        "static FyListStruct_%s fy_list_struct_%s_slice(FyListStruct_%s l, long start, long end) {\n"
+        "    if (start < 0) start = 0;\n"
+        "    if (start > l.len) start = l.len;\n"
+        "    if (end < start) end = start;\n"
+        "    if (end > l.len) end = l.len;\n"
+        "    long n = end - start;\n"
+        "    long cap = n > 0 ? n : 1;\n"
+        "    %s *data = malloc((size_t)cap * sizeof(%s));\n"
+        "    memcpy(data, l.data + start, (size_t)n * sizeof(%s));\n"
+        "    FyListStruct_%s r; r.data = data; r.len = n; r.cap = cap;\n"
+        "    return r;\n"
+        "}\n\n",
+        sd->name, sd->name, sd->name,
+        sd->name, sd->name, sd->name,
+        struct_ctype, struct_ctype, struct_ctype,
+        sd->name);
 }
 
 /* Enums have no field dependencies, so they can all be emitted up front, in
@@ -1072,6 +1110,23 @@ static void emit_expr(FILE *out, Expr *e) {
             const MapKind *k = map_kind_for(e->as.keys.target->type);
             fprintf(out, "fy_map_%s_keys(", k->tag);
             emit_expr(out, e->as.keys.target);
+            fprintf(out, ")");
+            return;
+        }
+        case EXPR_SLICE: {
+            Type base_type = e->as.slice.base->type;
+            if (type_is_list_of_struct(base_type)) {
+                const StructDecl *sd = struct_decl_for(list_elem(base_type));
+                fprintf(out, "fy_list_struct_%s_slice(", sd->name);
+            } else {
+                const ListKind *k = list_kind_for(base_type);
+                fprintf(out, "fy_list_%s_slice(", k->tag);
+            }
+            emit_expr(out, e->as.slice.base);
+            fprintf(out, ", ");
+            emit_expr(out, e->as.slice.start);
+            fprintf(out, ", ");
+            emit_expr(out, e->as.slice.end);
             fprintf(out, ")");
             return;
         }

@@ -557,6 +557,29 @@ static Type check_expr(Sema *sm, Scope *sc, Expr *e) {
             e->type = TYPE_LIST_STRING;
             return TYPE_LIST_STRING;
         }
+        case EXPR_SLICE: {
+            Type base_type = check_expr(sm, sc, e->as.slice.base);
+            if (sm->diag->has_error) return TYPE_UNKNOWN;
+            if (!type_is_list(base_type)) {
+                diag_set(sm->diag, e->line, "cannot slice %s; only lists support [a:b]",
+                         type_name(base_type));
+                return TYPE_UNKNOWN;
+            }
+            Type start_type = check_expr(sm, sc, e->as.slice.start);
+            if (sm->diag->has_error) return TYPE_UNKNOWN;
+            if (start_type != TYPE_INT) {
+                diag_set(sm->diag, e->line, "slice start must be int, got %s", type_name(start_type));
+                return TYPE_UNKNOWN;
+            }
+            Type end_type = check_expr(sm, sc, e->as.slice.end);
+            if (sm->diag->has_error) return TYPE_UNKNOWN;
+            if (end_type != TYPE_INT) {
+                diag_set(sm->diag, e->line, "slice end must be int, got %s", type_name(end_type));
+                return TYPE_UNKNOWN;
+            }
+            e->type = base_type;
+            return base_type;
+        }
     }
     return TYPE_UNKNOWN;
 }

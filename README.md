@@ -147,6 +147,12 @@ Lists:
 - `xs[i]` — read an element; `xs[i] = v;` — write one (both need an `int` index); both are
   bounds-checked at runtime and exit with a clear error on an out-of-range index, rather
   than reading or corrupting memory silently
+- `xs[start:end]` — a new list copied from index `start` (inclusive) up to `end` (exclusive);
+  out-of-range or reversed bounds clamp instead of erroring (`xs[2:1000]` just goes to the
+  end, `xs[-5:3]` clamps `start` to `0`, `end < start` gives an empty list) — same spirit as
+  `substring`. Works on any list, including `list<SomeStruct>`. Both bounds are required —
+  there's no `xs[:3]`/`xs[2:]` shorthand for an implied `0`/`len(xs)`; write `len(xs)`
+  explicitly for an open-ended slice
 - `len(xs)` — element count; also works on `string` (byte length)
 - `push(xs, v);` — appends `v` (must match the list's element type) to variable `xs`
 - `reverse(xs);`, `remove(xs, i);` (bounds-checked, shifts later elements down) — work on any

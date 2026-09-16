@@ -279,6 +279,14 @@ Expr *expr_new_keys(Expr *target, int line) {
     return e;
 }
 
+Expr *expr_new_slice(Expr *base, Expr *start, Expr *end, int line) {
+    Expr *e = expr_new(EXPR_SLICE, line);
+    e->as.slice.base = base;
+    e->as.slice.start = start;
+    e->as.slice.end = end;
+    return e;
+}
+
 void expr_free(Expr *e) {
     if (e == NULL) return;
     switch (e->kind) {
@@ -349,6 +357,11 @@ void expr_free(Expr *e) {
             break;
         case EXPR_KEYS:
             expr_free(e->as.keys.target);
+            break;
+        case EXPR_SLICE:
+            expr_free(e->as.slice.base);
+            expr_free(e->as.slice.start);
+            expr_free(e->as.slice.end);
             break;
     }
     free(e);
