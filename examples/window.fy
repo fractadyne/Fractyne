@@ -3,7 +3,7 @@
 //   fractyne run examples/window.fy
 // Click the window's close button, or press any key handled below, to quit.
 
-fn main() {
+fr main() {
     let ok = window_open(400, 300, "Fractyne Window Demo");
     if (!ok) {
         output("failed to open a window");

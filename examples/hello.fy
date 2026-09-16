@@ -1,3 +1,3 @@
-fn main() {
+fr main() {
     output("Hello, Fractyne!");
 }

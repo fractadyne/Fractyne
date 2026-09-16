@@ -1,4 +1,4 @@
-fn main() {
+fr main() {
     let n = 42;
     output("value is " + int_to_string(n));
 

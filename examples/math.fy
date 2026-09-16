@@ -1,4 +1,4 @@
-fn main() {
+fr main() {
     output(sqrt(16.0));
     output(pow(2.0, 10.0));
     output(abs_int(-5));

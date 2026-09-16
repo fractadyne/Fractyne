@@ -1,4 +1,4 @@
-fn main() {
+fr main() {
     let path = "/tmp/fractyne_example_files.txt";
 
     write_file(path, "first line");

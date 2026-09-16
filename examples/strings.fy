@@ -1,8 +1,8 @@
-fn greet(name: string) -> string {
+fr greet(name: string) -> string {
     return "Hello, " + name + "!";
 }
 
-fn main() {
+fr main() {
     output(greet("Fractyne"));
     let a = "foo";
     let b = "bar";

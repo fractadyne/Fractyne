@@ -1,4 +1,4 @@
-fn sum(xs: list<int>) -> int {
+fr sum(xs: list<int>) -> int {
     let total = 0;
     let i = 0;
     while (i < len(xs)) {
@@ -8,7 +8,7 @@ fn sum(xs: list<int>) -> int {
     return total;
 }
 
-fn main() {
+fr main() {
     let nums = [1, 2, 3, 4, 5];
     output(sum(nums));
 

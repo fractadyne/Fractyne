@@ -1,4 +1,4 @@
-fn main() {
+fr main() {
     let a = 7;
     let b = 3;
     output(a + b);

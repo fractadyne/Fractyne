@@ -54,7 +54,7 @@ typedef struct {
 } Keyword;
 
 static const Keyword KEYWORDS[] = {
-    {"let", TOK_LET},       {"fn", TOK_FN},         {"if", TOK_IF},
+    {"let", TOK_LET},       {"fr", TOK_FR},         {"if", TOK_IF},
     {"else", TOK_ELSE},     {"while", TOK_WHILE},   {"for", TOK_FOR},
     {"return", TOK_RETURN}, {"output", TOK_OUTPUT}, {"push", TOK_PUSH},
     {"len", TOK_LEN},       {"break", TOK_BREAK},   {"continue", TOK_CONTINUE},
@@ -286,7 +286,7 @@ const char *token_type_name(TokenType t) {
         case TOK_STRING_LIT: return "string literal";
         case TOK_IDENT: return "identifier";
         case TOK_LET: return "'let'";
-        case TOK_FN: return "'fn'";
+        case TOK_FR: return "'fr'";
         case TOK_IF: return "'if'";
         case TOK_ELSE: return "'else'";
         case TOK_WHILE: return "'while'";

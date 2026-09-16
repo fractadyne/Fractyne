@@ -8,7 +8,7 @@ struct Polygon {
     name: string
 }
 
-fn sum_x(points: list<Point>) -> int {
+fr sum_x(points: list<Point>) -> int {
     let total = 0;
     let i = 0;
     while (i < len(points)) {
@@ -18,7 +18,7 @@ fn sum_x(points: list<Point>) -> int {
     return total;
 }
 
-fn main() {
+fr main() {
     let points = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
     output(sum_x(points));
 

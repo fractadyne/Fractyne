@@ -819,7 +819,7 @@ int sema_check(Program *prog, Diag *diag) {
         }
     }
     if (main_fn == NULL) {
-        diag_set(diag, 0, "program must define 'fn main() { ... }'");
+        diag_set(diag, 0, "program must define 'fr main() { ... }'");
         return 0;
     }
 

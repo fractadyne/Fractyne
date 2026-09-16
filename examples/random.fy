@@ -1,4 +1,4 @@
-fn main() {
+fr main() {
     // seeded, so this example's output is reproducible for `make test`
     random_seed(1);
 

@@ -8,17 +8,17 @@ struct Line {
     end: Point
 }
 
-fn dist_sq(a: Point, b: Point) -> int {
+fr dist_sq(a: Point, b: Point) -> int {
     let dx = a.x - b.x;
     let dy = a.y - b.y;
     return dx * dx + dy * dy;
 }
 
-fn make_point(x: int, y: int) -> Point {
+fr make_point(x: int, y: int) -> Point {
     return Point { x: x, y: y };
 }
 
-fn main() {
+fr main() {
     let p1 = Point { x: 1, y: 2 };
     let p2 = Point { y: 5, x: 4 };
     output(dist_sq(p1, p2));

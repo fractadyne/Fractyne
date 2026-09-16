@@ -664,7 +664,7 @@ static Param *parse_typed_field_list(Parser *p, TokenType terminator, int *out_c
 
 static FunctionDecl *parse_function(Parser *p) {
     int line = cur(p)->line;
-    advance_tok(p); /* 'fn' */
+    advance_tok(p); /* 'fr' */
     Token *name = expect(p, TOK_IDENT, "a function name");
     if (name == NULL) return NULL;
     if (expect(p, TOK_LPAREN, "'(' after function name") == NULL) return NULL;
@@ -739,7 +739,7 @@ int parse_file_into_program(TokenList *tokens, PtrList *struct_names, Program *p
             program_add_global(prog, g);
             continue;
         }
-        if (!check(&p, TOK_FN)) {
+        if (!check(&p, TOK_FR)) {
             diag_set(diag, cur(&p)->line,
                      "expected a function, struct, involve, or global declaration but found %s",
                      token_type_name(cur(&p)->type));

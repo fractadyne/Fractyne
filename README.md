@@ -88,9 +88,9 @@ Builds every example that has a matching `.expected` file and diffs its output.
 - `for (let i = 0; cond; i = i + 1) { ... }` — C-style; init is `let` or a plain assignment
   (either can use a compound-assign operator), the loop variable is scoped to the loop
 - `break;` / `continue;` — only valid inside a `while` or `for` body
-- `fn name(param: type, ...) -> type { ... }` — recursion allowed; omit `-> type` for a
+- `fr name(param: type, ...) -> type { ... }` — recursion allowed; omit `-> type` for a
   function that returns nothing
-- Every program needs exactly one `fn main() { ... }` (no parameters, no return type) as
+- Every program needs exactly one `fr main() { ... }` (no parameters, no return type) as
   the entry point
 - `let NAME = literal;` at the top level — a global variable, visible to every function;
   the initializer must be a literal (or `-literal`), not an expression, so codegen can emit
@@ -110,7 +110,7 @@ Splitting a program across files:
 - The same file is only ever merged once, even if several files involve it, or it's
   involved transitively through a chain, or involving is cyclic (`a` involves `b` which
   involves `a`) — no include guards needed
-- Exactly one `fn main()` must exist across every involved file combined, not per file
+- Exactly one `fr main()` must exist across every involved file combined, not per file
 
 Lists:
 
@@ -145,7 +145,7 @@ Maps (keys are always `string`, values must be `int`/`float`/`bool`/`string` —
 
 Structs:
 
-- `struct Name { field: type, ... }` at the top level, alongside `fn` declarations — can be
+- `struct Name { field: type, ... }` at the top level, alongside `fr` declarations — can be
   declared in any order relative to where they're used, including fields of other structs
 - `Name { field: value, ... }` — a literal; must set every declared field exactly once, in
   any order (not just declaration order)

@@ -1,4 +1,4 @@
-fn classify(n: int) -> string {
+fr classify(n: int) -> string {
     if (n < 0) {
         return "negative";
     } else if (n == 0) {
@@ -8,11 +8,11 @@ fn classify(n: int) -> string {
     }
 }
 
-fn sign(n: int) -> string {
+fr sign(n: int) -> string {
     return n < 0 ? "negative" : (n == 0 ? "zero" : "positive");
 }
 
-fn main() {
+fr main() {
     output(classify(-5));
     output(classify(0));
     output(classify(42));

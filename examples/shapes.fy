@@ -1,4 +1,4 @@
-fn main() {
+fr main() {
     draw_square(3);
     output("---");
     draw_rect(5, 2);
