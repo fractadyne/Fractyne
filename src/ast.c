@@ -378,9 +378,10 @@ Stmt *stmt_new_assign(const char *name, Expr *value, int line) {
     return s;
 }
 
-Stmt *stmt_new_output(Expr *value, int line) {
+Stmt *stmt_new_output(Expr **values, int count, int line) {
     Stmt *s = stmt_new(STMT_OUTPUT, line);
-    s->as.output_stmt.value = value;
+    s->as.output_stmt.values = values;
+    s->as.output_stmt.count = count;
     return s;
 }
 
@@ -487,7 +488,8 @@ void stmt_free(Stmt *s) {
             expr_free(s->as.assign_stmt.value);
             break;
         case STMT_OUTPUT:
-            expr_free(s->as.output_stmt.value);
+            for (int i = 0; i < s->as.output_stmt.count; i++) expr_free(s->as.output_stmt.values[i]);
+            free(s->as.output_stmt.values);
             break;
         case STMT_IF:
             expr_free(s->as.if_stmt.cond);

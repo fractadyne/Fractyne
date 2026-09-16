@@ -611,20 +611,23 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
             return;
         }
         case STMT_OUTPUT: {
-            Type t = check_expr(sm, sc, s->as.output_stmt.value);
-            if (sm->diag->has_error) return;
-            if (type_is_list(t) || type_is_map(t)) {
-                diag_set(sm->diag, s->line,
-                         "cannot output a %s directly; index into it or use len()", type_name(t));
-                return;
-            }
-            if (type_is_struct(t)) {
-                diag_set(sm->diag, s->line,
-                         "cannot output a struct directly; output its fields instead");
-                return;
-            }
-            if (t == TYPE_VOID) {
-                diag_set(sm->diag, s->line, "cannot output a void value");
+            for (int i = 0; i < s->as.output_stmt.count; i++) {
+                Type t = check_expr(sm, sc, s->as.output_stmt.values[i]);
+                if (sm->diag->has_error) return;
+                if (type_is_list(t) || type_is_map(t)) {
+                    diag_set(sm->diag, s->line,
+                             "cannot output a %s directly; index into it or use len()", type_name(t));
+                    return;
+                }
+                if (type_is_struct(t)) {
+                    diag_set(sm->diag, s->line,
+                             "cannot output a struct directly; output its fields instead");
+                    return;
+                }
+                if (t == TYPE_VOID) {
+                    diag_set(sm->diag, s->line, "cannot output a void value");
+                    return;
+                }
             }
             return;
         }

@@ -15,4 +15,6 @@ fr main() {
     output(to_lower(s));
     output(trim("   spaced out   "));
     output(index_of(s, "Fractyne"));
+
+    output("a:", a, "b:", b, "sum:", 1 + 2);
 }

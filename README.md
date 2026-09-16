@@ -97,7 +97,8 @@ Builds every example that has a matching `.expected` file and diffs its output.
 - Bitwise `& | ^ ~ << >>` on `int` only, same precedence as C (`&`/`^`/`|` sit between `&&`
   and `==`; `<<`/`>>` sit between relational comparisons and `+`/`-`); also `&= |= ^= <<= >>=`
 - `cond ? a : b` — ternary; `cond` must be `bool`, and both branches must be the same type
-- `output(expr);`
+- `output(expr, ...);` — one or more comma-separated values, printed space-separated with a
+  single trailing newline (not one newline per value)
 - `if (cond) { ... } else if (cond) { ... } else { ... }`
 - `branch (expr) { case v1, v2 { ... } case v3 { ... } else { ... } }` — compares `expr`
   against each case's value(s) with `==` in order, running the first block that matches (a

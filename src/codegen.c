@@ -1082,40 +1082,53 @@ static void indent(FILE *out, int level) {
     for (int i = 0; i < level; i++) fprintf(out, "    ");
 }
 
-static void emit_output(FILE *out, int level, Expr *value) {
-    indent(out, level);
+/* Prints exactly one value's own representation, no separator and no
+ * trailing newline -- output(a, b, c) (see emit_output_stmt) calls this once
+ * per argument, printing a space between calls and one newline at the end,
+ * rather than each argument getting its own line. */
+static void emit_output_value(FILE *out, Expr *value) {
     if (type_is_enum(value->type)) {
         const EnumDecl *ed = enum_decl_for(value->type);
-        fprintf(out, "printf(\"%%s\\n\", fy_enum_names_%s[(int)(", ed->name);
+        fprintf(out, "printf(\"%%s\", fy_enum_names_%s[(int)(", ed->name);
         emit_expr(out, value);
-        fprintf(out, ")]);\n");
+        fprintf(out, ")])");
         return;
     }
     switch (value->type) {
         case TYPE_INT:
-            fprintf(out, "printf(\"%%ld\\n\", ");
+            fprintf(out, "printf(\"%%ld\", ");
             emit_expr(out, value);
-            fprintf(out, ");\n");
+            fprintf(out, ")");
             return;
         case TYPE_FLOAT:
-            fprintf(out, "printf(\"%%g\\n\", ");
+            fprintf(out, "printf(\"%%g\", ");
             emit_expr(out, value);
-            fprintf(out, ");\n");
+            fprintf(out, ")");
             return;
         case TYPE_BOOL:
-            fprintf(out, "printf(\"%%s\\n\", (");
+            fprintf(out, "printf(\"%%s\", (");
             emit_expr(out, value);
-            fprintf(out, ") ? \"true\" : \"false\");\n");
+            fprintf(out, ") ? \"true\" : \"false\")");
             return;
         case TYPE_STRING:
-            fprintf(out, "printf(\"%%s\\n\", ");
+            fprintf(out, "printf(\"%%s\", ");
             emit_expr(out, value);
-            fprintf(out, ");\n");
+            fprintf(out, ")");
             return;
         default:
-            fprintf(out, "/* unreachable: output of void/unknown */\n");
+            fprintf(out, "/* unreachable: output of void/unknown */ (void)0");
             return;
     }
+}
+
+static void emit_output_stmt(FILE *out, int level, Expr **values, int count) {
+    indent(out, level);
+    for (int i = 0; i < count; i++) {
+        if (i > 0) fprintf(out, "printf(\" \"); ");
+        emit_output_value(out, values[i]);
+        fprintf(out, "; ");
+    }
+    fprintf(out, "printf(\"\\n\");\n");
 }
 
 static void emit_stmt(FILE *out, int level, Stmt *s, int in_main);
@@ -1153,7 +1166,7 @@ static void emit_stmt(FILE *out, int level, Stmt *s, int in_main) {
             fprintf(out, ";\n");
             return;
         case STMT_OUTPUT:
-            emit_output(out, level, s->as.output_stmt.value);
+            emit_output_stmt(out, level, s->as.output_stmt.values, s->as.output_stmt.count);
             return;
         case STMT_IF:
             indent(out, level);

@@ -441,15 +441,22 @@ static Stmt *parse_let(Parser *p) {
     return s;
 }
 
+/* output(a, b, c); prints each argument's own representation separated by a
+ * single space, followed by one trailing newline -- not N separate lines. */
 static Stmt *parse_output(Parser *p) {
     int line = cur(p)->line;
     advance_tok(p); /* 'output' */
     if (expect(p, TOK_LPAREN, "'(' after output") == NULL) return NULL;
-    Expr *value = parse_expr(p);
-    if (value == NULL || p->diag->has_error) return NULL;
-    if (expect(p, TOK_RPAREN, "')' after output argument") == NULL) return NULL;
+    PtrList values;
+    ptrlist_init(&values);
+    do {
+        Expr *value = parse_expr(p);
+        if (value == NULL || p->diag->has_error) return NULL;
+        ptrlist_push(&values, value);
+    } while (match_tok(p, TOK_COMMA));
+    if (expect(p, TOK_RPAREN, "')' after output arguments") == NULL) return NULL;
     if (expect(p, TOK_SEMI, "';' after output statement") == NULL) return NULL;
-    return stmt_new_output(value, line);
+    return stmt_new_output((Expr **)values.items, values.count, line);
 }
 
 static Stmt *parse_push(Parser *p) {

@@ -100,7 +100,7 @@ typedef struct Stmt {
     union {
         struct { char *name; Expr *init; Type resolved_type; int is_fixed; } let_stmt;
         struct { char *name; Expr *value; } assign_stmt;
-        struct { Expr *value; } output_stmt;
+        struct { Expr **values; int count; } output_stmt;
         struct { Expr *cond; struct Stmt *then_branch; struct Stmt *else_branch; } if_stmt;
         struct { Expr *cond; struct Stmt *body; } while_stmt;
         struct { struct Stmt *init; Expr *cond; struct Stmt *step; struct Stmt *body; } for_stmt;
@@ -172,7 +172,7 @@ void expr_free(Expr *e);
 /* Stmt constructors */
 Stmt *stmt_new_let(const char *name, Expr *init, int line);
 Stmt *stmt_new_assign(const char *name, Expr *value, int line);
-Stmt *stmt_new_output(Expr *value, int line);
+Stmt *stmt_new_output(Expr **values, int count, int line);
 Stmt *stmt_new_if(Expr *cond, Stmt *then_branch, Stmt *else_branch, int line);
 Stmt *stmt_new_while(Expr *cond, Stmt *body, int line);
 Stmt *stmt_new_for(Stmt *init, Expr *cond, Stmt *step, Stmt *body, int line);
