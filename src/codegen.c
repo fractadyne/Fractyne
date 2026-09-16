@@ -1138,7 +1138,11 @@ static void emit_stmt(FILE *out, int level, Stmt *s, int in_main) {
     switch (s->kind) {
         case STMT_LET:
             indent(out, level);
-            fprintf(out, "%s %s = ", c_type_name(s->as.let_stmt.resolved_type), s->as.let_stmt.name);
+            /* c_type_name(TYPE_STRING) is already "const char *" -- skip the
+             * extra qualifier there to avoid a duplicate-const warning. */
+            fprintf(out, "%s%s %s = ",
+                    (s->as.let_stmt.is_fixed && s->as.let_stmt.resolved_type != TYPE_STRING) ? "const " : "",
+                    c_type_name(s->as.let_stmt.resolved_type), s->as.let_stmt.name);
             emit_expr(out, s->as.let_stmt.init);
             fprintf(out, ";\n");
             return;
@@ -1383,7 +1387,9 @@ int codegen_emit(Program *prog, const char *out_path, Diag *diag) {
 
     for (int i = 0; i < prog->global_count; i++) {
         Stmt *g = prog->globals[i];
-        fprintf(out, "static %s %s = ", c_type_name(g->as.let_stmt.resolved_type), g->as.let_stmt.name);
+        fprintf(out, "static %s%s %s = ",
+                (g->as.let_stmt.is_fixed && g->as.let_stmt.resolved_type != TYPE_STRING) ? "const " : "",
+                c_type_name(g->as.let_stmt.resolved_type), g->as.let_stmt.name);
         emit_expr(out, g->as.let_stmt.init);
         fprintf(out, ";\n");
     }

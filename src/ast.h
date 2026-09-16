@@ -98,7 +98,7 @@ typedef struct Stmt {
     StmtKind kind;
     int line;
     union {
-        struct { char *name; Expr *init; Type resolved_type; } let_stmt;
+        struct { char *name; Expr *init; Type resolved_type; int is_fixed; } let_stmt;
         struct { char *name; Expr *value; } assign_stmt;
         struct { Expr *value; } output_stmt;
         struct { Expr *cond; struct Stmt *then_branch; struct Stmt *else_branch; } if_stmt;

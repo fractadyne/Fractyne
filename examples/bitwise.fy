@@ -17,4 +17,16 @@ fr main() {
     let xs = [1, 2, 3];
     let m = {"x": 1};
     output(len(xs) + len(m));
+
+    let y = 12;
+    y &= 10;
+    output(y);
+    y |= 5;
+    output(y);
+    y ^= 3;
+    output(y);
+    y <<= 2;
+    output(y);
+    y >>= 1;
+    output(y);
 }

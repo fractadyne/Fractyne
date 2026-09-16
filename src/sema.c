@@ -8,6 +8,7 @@
 typedef struct {
     const char *name;
     Type type;
+    int is_fixed;
 } VarEntry;
 
 typedef struct Scope {
@@ -25,13 +26,14 @@ typedef struct {
     int loop_depth; /* > 0 inside a while/for body; guards break/continue */
 } Sema;
 
-static void scope_push_var(Scope *sc, const char *name, Type type) {
+static void scope_push_var(Scope *sc, const char *name, Type type, int is_fixed) {
     if (sc->count == sc->capacity) {
         sc->capacity = sc->capacity == 0 ? 8 : sc->capacity * 2;
         sc->vars = realloc(sc->vars, (size_t)sc->capacity * sizeof(VarEntry));
     }
     sc->vars[sc->count].name = name;
     sc->vars[sc->count].type = type;
+    sc->vars[sc->count].is_fixed = is_fixed;
     sc->count++;
 }
 
@@ -42,17 +44,41 @@ static int scope_declared_here(Scope *sc, const char *name) {
     return 0;
 }
 
-static Type scope_lookup(Scope *sc, const char *name, int *found) {
+static VarEntry *scope_find(Scope *sc, const char *name) {
     for (Scope *s = sc; s != NULL; s = s->parent) {
         for (int i = 0; i < s->count; i++) {
-            if (strcmp(s->vars[i].name, name) == 0) {
-                *found = 1;
-                return s->vars[i].type;
-            }
+            if (strcmp(s->vars[i].name, name) == 0) return &s->vars[i];
         }
     }
-    *found = 0;
-    return TYPE_UNKNOWN;
+    return NULL;
+}
+
+static Type scope_lookup(Scope *sc, const char *name, int *found) {
+    VarEntry *e = scope_find(sc, name);
+    if (e == NULL) { *found = 0; return TYPE_UNKNOWN; }
+    *found = 1;
+    return e->type;
+}
+
+/* Reports and returns 0 if `name` is declared and fixed; else returns 1
+ * (including when `name` isn't declared at all -- the caller's own
+ * "undeclared" check runs separately and takes priority). `verb` fills in
+ * "cannot <verb> fixed variable 'name'", e.g. "assign to", "push onto". */
+static int check_not_fixed(Sema *sm, Scope *sc, const char *name, int line, const char *verb) {
+    VarEntry *e = scope_find(sc, name);
+    if (e != NULL && e->is_fixed) {
+        diag_set(sm->diag, line, "cannot %s fixed variable '%s'", verb, name);
+        return 0;
+    }
+    return 1;
+}
+
+/* Walks a field-access chain (a.b.c) down to the plain variable it's rooted
+ * in, e.g. for `a.b.c = v;`'s base expression `a.b` -- fixed-ness is a
+ * property of that root binding, not of any intermediate field. */
+static const char *root_var_name(Expr *e) {
+    while (e->kind == EXPR_FIELD) e = e->as.field.base;
+    return e->kind == EXPR_VAR ? e->as.string_val : NULL;
 }
 
 static FunctionDecl *find_function(Sema *sm, const char *name) {
@@ -563,7 +589,7 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                 return;
             }
             s->as.let_stmt.resolved_type = t;
-            scope_push_var(sc, s->as.let_stmt.name, t);
+            scope_push_var(sc, s->as.let_stmt.name, t, s->as.let_stmt.is_fixed);
             return;
         }
         case STMT_ASSIGN: {
@@ -574,6 +600,7 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                          s->as.assign_stmt.name);
                 return;
             }
+            if (!check_not_fixed(sm, sc, s->as.assign_stmt.name, s->line, "assign to")) return;
             Type value_type = check_expr(sm, sc, s->as.assign_stmt.value);
             if (sm->diag->has_error) return;
             if (value_type != declared) {
@@ -695,6 +722,7 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                 diag_set(sm->diag, s->line, "push() requires a list variable, got %s", type_name(declared));
                 return;
             }
+            if (!check_not_fixed(sm, sc, s->as.push_stmt.name, s->line, "push onto")) return;
             Type value_type = check_expr(sm, sc, s->as.push_stmt.value);
             if (sm->diag->has_error) return;
             Type elem = list_elem(declared);
@@ -712,6 +740,7 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                          s->as.index_assign_stmt.name);
                 return;
             }
+            if (!check_not_fixed(sm, sc, s->as.index_assign_stmt.name, s->line, "assign into")) return;
             if (type_is_list(declared)) {
                 Type idx = check_expr(sm, sc, s->as.index_assign_stmt.index);
                 if (sm->diag->has_error) return;
@@ -759,6 +788,8 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                          s->as.field_assign_stmt.field, type_name(declared));
                 return;
             }
+            const char *root = root_var_name(s->as.field_assign_stmt.base);
+            if (root != NULL && !check_not_fixed(sm, sc, root, s->line, "assign into")) return;
             const StructDecl *sd = struct_decl_for(declared);
             const Param *field = find_struct_field(sd, s->as.field_assign_stmt.field);
             if (field == NULL) {
@@ -791,6 +822,7 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                          "sort by a field manually");
                 return;
             }
+            if (!check_not_fixed(sm, sc, s->as.sort_stmt.name, s->line, "sort")) return;
             s->as.sort_stmt.resolved_type = declared;
             return;
         }
@@ -806,6 +838,7 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                 diag_set(sm->diag, s->line, "reverse() requires a list, got %s", type_name(declared));
                 return;
             }
+            if (!check_not_fixed(sm, sc, s->as.reverse_stmt.name, s->line, "reverse")) return;
             s->as.reverse_stmt.resolved_type = declared;
             return;
         }
@@ -821,6 +854,7 @@ static void check_stmt(Sema *sm, Scope *sc, Stmt *s) {
                 diag_set(sm->diag, s->line, "remove() requires a list, got %s", type_name(declared));
                 return;
             }
+            if (!check_not_fixed(sm, sc, s->as.remove_stmt.name, s->line, "remove from")) return;
             Type idx = check_expr(sm, sc, s->as.remove_stmt.index);
             if (sm->diag->has_error) return;
             if (idx != TYPE_INT) {
@@ -928,7 +962,7 @@ int sema_check(Program *prog, Diag *diag) {
         Type t = check_expr(&sm, &global_scope, g->as.let_stmt.init);
         if (diag->has_error) { free(global_scope.vars); return 0; }
         g->as.let_stmt.resolved_type = t;
-        scope_push_var(&global_scope, g->as.let_stmt.name, t);
+        scope_push_var(&global_scope, g->as.let_stmt.name, t, g->as.let_stmt.is_fixed);
     }
 
     for (int i = 0; i < prog->count && !diag->has_error; i++) {
@@ -937,7 +971,7 @@ int sema_check(Program *prog, Diag *diag) {
         Scope fn_scope = {0};
         fn_scope.parent = &global_scope;
         for (int j = 0; j < f->param_count; j++) {
-            scope_push_var(&fn_scope, f->params[j].name, f->params[j].type);
+            scope_push_var(&fn_scope, f->params[j].name, f->params[j].type, 0);
         }
         check_block(&sm, &fn_scope, f->body);
         free(fn_scope.vars);

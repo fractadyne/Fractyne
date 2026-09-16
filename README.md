@@ -81,6 +81,10 @@ Builds every example that has a matching `.expected` file and diffs its output.
 - Types: `int`, `float`, `bool`, `string`, `list<int|float|bool|string>`,
   `map<string, int|float|bool|string>`
 - `let name = expr;` — type is inferred from the initializer and fixed thereafter
+- `fixed name = expr;` — same as `let`, except the binding itself can never change again:
+  no `name = ...`, `+=`-style compound assign, `++`/`--`, `push`/`sort`/`reverse`/`remove`
+  on it if it's a list, or writing into one of its fields if it's a struct. Reading it and
+  passing it around works exactly like `let`
 - `name = expr;` — reassignment, must match the variable's type; also `+= -= *= /= %=`,
   each desugared to `name = name <op> expr` at parse time
 - `name++;` / `name--;` — `int`-only shorthand for `name = name + 1;` / `name = name - 1;`.
@@ -91,7 +95,7 @@ Builds every example that has a matching `.expected` file and diffs its output.
   `bool`/`string`/an enum — a list, map, or struct has no built-in equality; compare its
   fields/elements individually instead
 - Bitwise `& | ^ ~ << >>` on `int` only, same precedence as C (`&`/`^`/`|` sit between `&&`
-  and `==`; `<<`/`>>` sit between relational comparisons and `+`/`-`)
+  and `==`; `<<`/`>>` sit between relational comparisons and `+`/`-`); also `&= |= ^= <<= >>=`
 - `cond ? a : b` — ternary; `cond` must be `bool`, and both branches must be the same type
 - `output(expr);`
 - `if (cond) { ... } else if (cond) { ... } else { ... }`
@@ -106,10 +110,11 @@ Builds every example that has a matching `.expected` file and diffs its output.
   function that returns nothing
 - Every program needs exactly one `fr main() { ... }` (no parameters, no return type) as
   the entry point
-- `let NAME = literal;` at the top level — a global variable, visible to every function;
-  the initializer must be a literal (or `-literal`), not an expression, so codegen can emit
-  it as a plain C global with no static-initializer complications. Despite the name, it's
-  an ordinary mutable variable (`NAME = expr;` works from any function), not a true constant
+- `let NAME = literal;` (or `fixed NAME = literal;`) at the top level — a global variable,
+  visible to every function; the initializer must be a literal (or `-literal`), not an
+  expression, so codegen can emit it as a plain C global with no static-initializer
+  complications. A `let` global is an ordinary mutable variable (`NAME = expr;` works from
+  any function) despite the name — use `fixed` for an actual global constant
 - `//` line comments, `/* block comments */` (no nesting)
 
 Splitting a program across files:

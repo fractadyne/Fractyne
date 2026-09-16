@@ -54,7 +54,7 @@ typedef struct {
 } Keyword;
 
 static const Keyword KEYWORDS[] = {
-    {"let", TOK_LET},       {"fr", TOK_FR},         {"if", TOK_IF},
+    {"let", TOK_LET},       {"fixed", TOK_FIXED},   {"fr", TOK_FR},         {"if", TOK_IF},
     {"else", TOK_ELSE},     {"while", TOK_WHILE},   {"for", TOK_FOR},
     {"return", TOK_RETURN}, {"output", TOK_OUTPUT}, {"push", TOK_PUSH},
     {"len", TOK_LEN},       {"break", TOK_BREAK},   {"continue", TOK_CONTINUE},
@@ -233,24 +233,31 @@ int lex(const char *source, TokenList *out, Diag *diag) {
                 break;
             case '<':
                 if (match(&lx, '=')) push_token(&lx, TOK_LE, NULL, 0, 0, 0, line);
-                else if (match(&lx, '<')) push_token(&lx, TOK_SHL, NULL, 0, 0, 0, line);
-                else push_token(&lx, TOK_LT, NULL, 0, 0, 0, line);
+                else if (match(&lx, '<')) {
+                    if (match(&lx, '=')) push_token(&lx, TOK_SHL_ASSIGN, NULL, 0, 0, 0, line);
+                    else push_token(&lx, TOK_SHL, NULL, 0, 0, 0, line);
+                } else push_token(&lx, TOK_LT, NULL, 0, 0, 0, line);
                 break;
             case '>':
                 if (match(&lx, '=')) push_token(&lx, TOK_GE, NULL, 0, 0, 0, line);
-                else if (match(&lx, '>')) push_token(&lx, TOK_SHR, NULL, 0, 0, 0, line);
-                else push_token(&lx, TOK_GT, NULL, 0, 0, 0, line);
+                else if (match(&lx, '>')) {
+                    if (match(&lx, '=')) push_token(&lx, TOK_SHR_ASSIGN, NULL, 0, 0, 0, line);
+                    else push_token(&lx, TOK_SHR, NULL, 0, 0, 0, line);
+                } else push_token(&lx, TOK_GT, NULL, 0, 0, 0, line);
                 break;
             case '&':
                 if (match(&lx, '&')) { push_token(&lx, TOK_AND, NULL, 0, 0, 0, line); break; }
+                if (match(&lx, '=')) { push_token(&lx, TOK_AMP_ASSIGN, NULL, 0, 0, 0, line); break; }
                 push_token(&lx, TOK_AMP, NULL, 0, 0, 0, line);
                 break;
             case '|':
                 if (match(&lx, '|')) { push_token(&lx, TOK_OR, NULL, 0, 0, 0, line); break; }
+                if (match(&lx, '=')) { push_token(&lx, TOK_PIPE_ASSIGN, NULL, 0, 0, 0, line); break; }
                 push_token(&lx, TOK_PIPE, NULL, 0, 0, 0, line);
                 break;
             case '^':
-                push_token(&lx, TOK_CARET, NULL, 0, 0, 0, line);
+                if (match(&lx, '=')) push_token(&lx, TOK_CARET_ASSIGN, NULL, 0, 0, 0, line);
+                else push_token(&lx, TOK_CARET, NULL, 0, 0, 0, line);
                 break;
             case '~':
                 push_token(&lx, TOK_TILDE, NULL, 0, 0, 0, line);
@@ -294,6 +301,7 @@ const char *token_type_name(TokenType t) {
         case TOK_STRING_LIT: return "string literal";
         case TOK_IDENT: return "identifier";
         case TOK_LET: return "'let'";
+        case TOK_FIXED: return "'fixed'";
         case TOK_FR: return "'fr'";
         case TOK_IF: return "'if'";
         case TOK_ELSE: return "'else'";
@@ -362,6 +370,11 @@ const char *token_type_name(TokenType t) {
         case TOK_PERCENT_ASSIGN: return "'%='";
         case TOK_PLUS_PLUS: return "'++'";
         case TOK_MINUS_MINUS: return "'--'";
+        case TOK_AMP_ASSIGN: return "'&='";
+        case TOK_PIPE_ASSIGN: return "'|='";
+        case TOK_CARET_ASSIGN: return "'^='";
+        case TOK_SHL_ASSIGN: return "'<<='";
+        case TOK_SHR_ASSIGN: return "'>>='";
     }
     return "?";
 }

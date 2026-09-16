@@ -423,16 +423,22 @@ static Expr *parse_expr(Parser *p) { return parse_ternary(p); }
 
 /* ---- statements ---- */
 
+/* Handles both 'let' and 'fixed' -- identical grammar, differing only in
+ * whether the resulting binding can ever be reassigned/mutated afterward
+ * (checked in sema, not here; see Sema's VarEntry.is_fixed). */
 static Stmt *parse_let(Parser *p) {
     int line = cur(p)->line;
-    advance_tok(p); /* 'let' */
+    int is_fixed = check(p, TOK_FIXED);
+    advance_tok(p); /* 'let' or 'fixed' */
     Token *name = expect(p, TOK_IDENT, "a variable name");
     if (name == NULL) return NULL;
     if (expect(p, TOK_ASSIGN, "'=' after variable name") == NULL) return NULL;
     Expr *init = parse_expr(p);
     if (init == NULL || p->diag->has_error) return NULL;
     if (expect(p, TOK_SEMI, "';' after variable declaration") == NULL) return NULL;
-    return stmt_new_let(name->text, init, line);
+    Stmt *s = stmt_new_let(name->text, init, line);
+    s->as.let_stmt.is_fixed = is_fixed;
+    return s;
 }
 
 static Stmt *parse_output(Parser *p) {
@@ -538,6 +544,11 @@ static TokenType compound_assign_op(TokenType t) {
         case TOK_STAR_ASSIGN: return TOK_STAR;
         case TOK_SLASH_ASSIGN: return TOK_SLASH;
         case TOK_PERCENT_ASSIGN: return TOK_PERCENT;
+        case TOK_AMP_ASSIGN: return TOK_AMP;
+        case TOK_PIPE_ASSIGN: return TOK_PIPE;
+        case TOK_CARET_ASSIGN: return TOK_CARET;
+        case TOK_SHL_ASSIGN: return TOK_SHL;
+        case TOK_SHR_ASSIGN: return TOK_SHR;
         default: return TOK_EOF;
     }
 }
@@ -683,7 +694,9 @@ static Stmt *parse_return(Parser *p) {
 
 static Stmt *parse_statement(Parser *p) {
     switch (cur(p)->type) {
-        case TOK_LET: return parse_let(p);
+        case TOK_LET:
+        case TOK_FIXED:
+            return parse_let(p);
         case TOK_OUTPUT: return parse_output(p);
         case TOK_PUSH: return parse_push(p);
         case TOK_SORT: return parse_sort(p);
@@ -1005,7 +1018,7 @@ int parse_file_into_program(TokenList *tokens, PtrList *struct_names, PtrList *e
             program_add_enum(prog, e);
             continue;
         }
-        if (check(&p, TOK_LET)) {
+        if (check(&p, TOK_LET) || check(&p, TOK_FIXED)) {
             Stmt *g = parse_let(&p);
             if (g == NULL || diag->has_error) return 0;
             program_add_global(prog, g);
